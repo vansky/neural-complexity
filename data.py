@@ -60,24 +60,22 @@ class Corpus(object):
     def tokenize_with_unks(self, path):
         """Tokenizes a text file."""
         assert os.path.exists(path)
+        all_ids = []
+        with open(path, 'r') as f:
+            #tokens = 0
+            for line in f:
+                words = line.split() + ['<eos>']
+                tokens = len(words)
 
-        with open(path, 'r') as f:
-            tokens = 0
-            for line in f:
-                words = line.split() + ['<eos>']
-                tokens += len(words)
-        
-        # Tokenize file content
-        with open(path, 'r') as f:
-            ids = torch.LongTensor(tokens)
-            token = 0
-            for line in f:
-                words = line.split() + ['<eos>']
+                # tokenize file content
+                ids = torch.LongTensor(tokens)
+                token = 0
                 for word in words:
                     if word not in self.dictionary.word2idx:
                         ids[token] = self.dictionary.word2idx["<unk>"]
                     else:
                         ids[token] = self.dictionary.word2idx[word]
                     token += 1
-
-        return ids
+                all_ids.append(ids)
+        
+        return all_ids

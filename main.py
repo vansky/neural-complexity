@@ -73,11 +73,11 @@ def batchify(data, bsz):
     if args.cuda:
         data = data.cuda()
     return data
-
+    
 eval_batch_size = 10
 train_data = batchify(corpus.train, args.batch_size)
 val_data = batchify(corpus.valid, eval_batch_size)
-test_data = batchify(corpus.test, eval_batch_size)
+test_data = corpus.test
 vocab = corpus.dictionary
 
 ###############################################################################
@@ -105,7 +105,7 @@ def repackage_hidden(h):
 
 
 def test_get_batch(source, i, evaluation=False):
-    seq_len = len(source) - 1 - i
+    seq_len = min(args.bptt, len(source) - 1 - i)
     data = Variable(source[i:i+seq_len], volatile=evaluation)
     target = Variable(source[i+1:i+1+seq_len].view(-1))
     return data, target
@@ -122,13 +122,17 @@ def test_evaluate(data_source):
     model.eval()
     total_loss = 0
     ntokens = len(corpus.dictionary)
-    hidden = model.init_hidden(eval_batch_size)
-    print data_source
-    for i in range(0, data_source.size(0)):
-        print i
-        print data_source.size(0)
-        print args.bptt
-        data, targets = test_get_batch(data_source, i, evaluation=True)
+    #hidden = model.init_hidden(eval_batch_size)
+    #print data_source
+    for sent in data_source:
+        if args.cuda:
+            sent = sent.cuda()
+        print sent
+        hidden = model.init_hidden(sent.size(0))
+        # 0 because we want to evaluate the whole sentence
+        data, targets = test_get_batch(sent, 0, evaluation=True)
+        data.unsqueeze(0)
+        targets.unsqueeze(0)
         output, hidden = model(data, hidden)
         output_flat = output.view(-1, ntokens)
         curr_loss = len(data) * criterion(output_flat, targets).data
