@@ -104,6 +104,12 @@ def repackage_hidden(h):
         return tuple(repackage_hidden(v) for v in h)
 
 
+def test_get_batch(source, i, evaluation=False):
+    seq_len = len(source) - 1 - i
+    data = Variable(source[i:i+seq_len], volatile=evaluation)
+    target = Variable(source[i+1:i+1+seq_len].view(-1))
+    return data, target
+    
 def get_batch(source, i, evaluation=False):
     seq_len = min(args.bptt, len(source) - 1 - i)
     data = Variable(source[i:i+seq_len], volatile=evaluation)
@@ -111,17 +117,43 @@ def get_batch(source, i, evaluation=False):
     return data, target
 
 
+def test_evaluate(data_source):
+    # Turn on evaluation mode which disables dropout.
+    model.eval()
+    total_loss = 0
+    ntokens = len(corpus.dictionary)
+    hidden = model.init_hidden(eval_batch_size)
+    print data_source
+    for i in range(0, data_source.size(0)):
+        print i
+        print data_source.size(0)
+        print args.bptt
+        data, targets = test_get_batch(data_source, i, evaluation=True)
+        output, hidden = model(data, hidden)
+        output_flat = output.view(-1, ntokens)
+        curr_loss = len(data) * criterion(output_flat, targets).data
+        total_loss += curr_loss
+        print data,":",curr_loss
+        hidden = repackage_hidden(hidden)
+    return total_loss[0] / len(data_source)
+
 def evaluate(data_source):
     # Turn on evaluation mode which disables dropout.
     model.eval()
     total_loss = 0
     ntokens = len(corpus.dictionary)
     hidden = model.init_hidden(eval_batch_size)
+    print data_source
     for i in range(0, data_source.size(0) - 1, args.bptt):
+        print i
+        print data_source.size(0)
+        print args.bptt
         data, targets = get_batch(data_source, i, evaluation=True)
         output, hidden = model(data, hidden)
         output_flat = output.view(-1, ntokens)
-        total_loss += len(data) * criterion(output_flat, targets).data
+        curr_loss = len(data) * criterion(output_flat, targets).data
+        total_loss += curr_loss
+        print data,":",curr_loss
         hidden = repackage_hidden(hidden)
     return total_loss[0] / len(data_source)
 
@@ -193,7 +225,7 @@ with open(args.save, 'rb') as f:
     model = torch.load(f)
 
 # Run on test data.
-test_loss = evaluate(test_data)
+test_loss = test_evaluate(test_data)
 print('=' * 89)
 print('| End of training | test loss {:5.2f} | test ppl {:8.2f}'.format(
     test_loss, math.exp(test_loss)))
