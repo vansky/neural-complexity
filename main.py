@@ -47,6 +47,8 @@ parser.add_argument('--test', action='store_true',
                     help='test a trained LM')
 parser.add_argument('--save_data', type=str, default='lm_data.bin',
                     help='path to save the LM data')
+parser.add_argument('--load_data', type=str, default='lm_data.bin',
+                    help='path to load the LM data')
 args = parser.parse_args()
 
 # Set the random seed manually for reproducibility.
@@ -77,7 +79,9 @@ def batchify(data, bsz):
 eval_batch_size = 10
 train_data = batchify(corpus.train, args.batch_size)
 val_data = batchify(corpus.valid, eval_batch_size)
-test_data = corpus.test
+if args.test:
+    test_corpus = data.TestCorpus(args.data, args.load_data)
+    test_sents, test_data = test_corpus.test
 vocab = corpus.dictionary
 
 ###############################################################################
@@ -117,27 +121,25 @@ def get_batch(source, i, evaluation=False):
     return data, target
 
 
-def test_evaluate(data_source):
+def test_evaluate(test_sentences, data_source):
     # Turn on evaluation mode which disables dropout.
     model.eval()
     total_loss = 0
     ntokens = len(corpus.dictionary)
-    #hidden = model.init_hidden(eval_batch_size)
-    #print data_source
-    for sent in data_source:
+    for i in range(len(data_source)):
+        sent_ids = data_source[i]
+        sent = test_sentences[i]
         if args.cuda:
-            sent = sent.cuda()
-        print sent
-        hidden = model.init_hidden(sent.size(0))
+            sent_ids = sent_ids.cuda()
+        hidden = model.init_hidden(sent_ids.size(0)-1)
         # 0 because we want to evaluate the whole sentence
-        data, targets = test_get_batch(sent, 0, evaluation=True)
-        data.unsqueeze(0)
-        targets.unsqueeze(0)
+        data, targets = test_get_batch(sent_ids, 0, evaluation=True)
+        data=data.unsqueeze(0)
         output, hidden = model(data, hidden)
         output_flat = output.view(-1, ntokens)
         curr_loss = len(data) * criterion(output_flat, targets).data
         total_loss += curr_loss
-        print data,":",curr_loss
+        print sent,":",curr_loss[0]
         hidden = repackage_hidden(hidden)
     return total_loss[0] / len(data_source)
 
@@ -147,17 +149,12 @@ def evaluate(data_source):
     total_loss = 0
     ntokens = len(corpus.dictionary)
     hidden = model.init_hidden(eval_batch_size)
-    print data_source
     for i in range(0, data_source.size(0) - 1, args.bptt):
-        print i
-        print data_source.size(0)
-        print args.bptt
         data, targets = get_batch(data_source, i, evaluation=True)
         output, hidden = model(data, hidden)
         output_flat = output.view(-1, ntokens)
         curr_loss = len(data) * criterion(output_flat, targets).data
         total_loss += curr_loss
-        print data,":",curr_loss
         hidden = repackage_hidden(hidden)
     return total_loss[0] / len(data_source)
 
@@ -229,7 +226,7 @@ with open(args.save, 'rb') as f:
     model = torch.load(f)
 
 # Run on test data.
-test_loss = test_evaluate(test_data)
+test_loss = test_evaluate(test_sents, test_data)
 print('=' * 89)
 print('| End of training | test loss {:5.2f} | test ppl {:8.2f}'.format(
     test_loss, math.exp(test_loss)))

@@ -18,6 +18,41 @@ class Dictionary(object):
     def __len__(self):
         return len(self.idx2word)
 
+class TestCorpus(object):
+    def __init__(self, path, load_from):
+        self.dictionary = self.load_dict(os.path.join(path, load_from))
+        self.test = self.tokenize_with_unks(os.path.join(path, 'test.txt'))
+
+    def load_dict(self, path):
+        with open(path, 'rb') as f:
+            _, _, _, dictionary = torch.load(f, pickle_module=dill)
+            return dictionary
+
+    def tokenize_with_unks(self, path):
+        """Tokenizes a text file."""
+        assert os.path.exists(path)
+        all_ids = []
+        sents = []
+        with open(path, 'r') as f:
+            for line in f:
+                sents.append(line.strip())
+                words = line.split() + ['<eos>']
+                tokens = len(words)
+
+                # tokenize file content
+                ids = torch.LongTensor(tokens)
+                token = 0
+                for word in words:
+                    if word not in self.dictionary.word2idx:
+                        ids[token] = self.dictionary.word2idx["<unk>"]
+                    else:
+                        ids[token] = self.dictionary.word2idx[word]
+                    token += 1
+                all_ids.append(ids)
+        
+        return (sents, all_ids)
+
+        
 
 class Corpus(object):
     def __init__(self, path, save_to):
