@@ -8,8 +8,8 @@ from torch.autograd import Variable
 import data
 import model
 
-parser = argparse.ArgumentParser(description='PyTorch PennTreeBank RNN/LSTM Language Model')
-parser.add_argument('--data', type=str, default='./data/penn',
+parser = argparse.ArgumentParser(description='PyTorch RNN/LSTM Language Model')
+parser.add_argument('--data', type=str, default='./data/wikitext-2',
                     help='location of the data corpus')
 parser.add_argument('--model', type=str, default='LSTM',
                     help='type of recurrent net (RNN_TANH, RNN_RELU, LSTM, GRU)')
@@ -77,9 +77,10 @@ def batchify(data, bsz):
     return data
     
 eval_batch_size = 10
-train_data = batchify(corpus.train, args.batch_size)
-val_data = batchify(corpus.valid, eval_batch_size)
-if args.test:
+if args.train:
+    train_data = batchify(corpus.train, args.batch_size)
+    val_data = batchify(corpus.valid, eval_batch_size)
+elif args.test:
     test_corpus = data.TestCorpus(args.data, args.load_data)
     test_sents, test_data = test_corpus.test
 vocab = corpus.dictionary
@@ -108,13 +109,14 @@ def repackage_hidden(h):
         return tuple(repackage_hidden(v) for v in h)
 
 
-def test_get_batch(source, i, evaluation=False):
-    seq_len = min(args.bptt, len(source) - 1 - i)
-    data = Variable(source[i:i+seq_len], volatile=evaluation)
-    target = Variable(source[i+1:i+1+seq_len].view(-1))
+def test_get_batch(source, evaluation=False):
+    # This version of get_batch preps all the data as a single batch
+    data = Variable(source[:-1], volatile=evaluation)
+    target = Variable(source[1:].view(-1))
     return data, target
     
 def get_batch(source, i, evaluation=False):
+    # This version of get_batch preps mini-batches of size args.bptt
     seq_len = min(args.bptt, len(source) - 1 - i)
     data = Variable(source[i:i+seq_len], volatile=evaluation)
     target = Variable(source[i+1:i+1+seq_len].view(-1))
@@ -132,8 +134,8 @@ def test_evaluate(test_sentences, data_source):
         if args.cuda:
             sent_ids = sent_ids.cuda()
         hidden = model.init_hidden(sent_ids.size(0)-1)
-        # 0 because we want to evaluate the whole sentence
-        data, targets = test_get_batch(sent_ids, 0, evaluation=True)
+        # test_get_batch because we want to evaluate the whole sentence
+        data, targets = test_get_batch(sent_ids, evaluation=True)
         data=data.unsqueeze(0)
         output, hidden = model(data, hidden)
         output_flat = output.view(-1, ntokens)
