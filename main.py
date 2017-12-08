@@ -1,6 +1,7 @@
 import argparse
 import time
 import math
+import sys
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
@@ -41,8 +42,8 @@ parser.add_argument('--log-interval', type=int, default=200, metavar='N',
                     help='report interval')
 parser.add_argument('--save', type=str,  default='model.pt',
                     help='path to save the final model')
-parser.add_argument('--train', action='store_true',
-                    help='train a new LM')
+parser.add_argument('--wordlevel', action='store_true',
+                    help='output word-level complexity metrics')
 parser.add_argument('--test', action='store_true',
                     help='test a trained LM')
 parser.add_argument('--save_data', type=str, default='lm_data.bin',
@@ -77,12 +78,21 @@ def batchify(data, bsz):
     return data
     
 eval_batch_size = 10
-if args.train:
-    train_data = batchify(corpus.train, args.batch_size)
-    val_data = batchify(corpus.valid, eval_batch_size)
-elif args.test:
-    test_corpus = data.TestCorpus(args.data, args.load_data)
-    test_sents, test_data = test_corpus.test
+sys.stderr.write('Reading data\n')
+
+# TODO: Training needs to be at the sentence level like test
+# TODO: Could batchify over training sentences by padding to longest
+# TODO: If we do the above, we could get rid of the batch_size vars
+train_data = batchify(corpus.train, args.batch_size)
+val_data = batchify(corpus.valid, eval_batch_size)
+
+# NOTE: Batchify is inefficient or lossy for test time
+test_corpus = data.TestCorpus(args.data, args.load_data)
+test_sents, test_data = test_corpus.test
+
+# TODO: We shouldn't need to read in all the corpora every time.
+# We could save the vocab to a file and
+#    just load in that file if given that param
 vocab = corpus.dictionary
 
 ###############################################################################
@@ -141,7 +151,14 @@ def test_evaluate(test_sentences, data_source):
         output_flat = output.view(-1, ntokens)
         curr_loss = len(data) * criterion(output_flat, targets).data
         total_loss += curr_loss
-        print sent,":",curr_loss[0]
+        if args.wordlevel:
+            print('sent: '+sent)
+            print('type(output_flat): '+str(type(output_flat)))
+            print('output_flat.shape: '+str(output_flat.shape))
+            #for wix, word in sent.split():
+            raise()
+        else:
+            print(sent+":"+' '+str(curr_loss[0]))
         hidden = repackage_hidden(hidden)
     return total_loss[0] / len(data_source)
 
@@ -201,6 +218,11 @@ best_val_loss = None
 
 # At any point you can hit Ctrl + C to break out of training early.
 if not args.test:
+    timer = 5
+    sys.stderr.write('Training model in 5 seconds (Ctrl+C to abort)\n')
+    while timer > 0:
+        time.sleep(5)
+    sys.stderr.write('Training model now\n')
     try:
         for epoch in range(1, args.epochs+1):
             epoch_start_time = time.time()
@@ -223,10 +245,12 @@ if not args.test:
         print('-' * 89)
         print('Exiting from training early')
 
+sys.stderr.write('Loading model\n')
 # Load the best saved model.
 with open(args.save, 'rb') as f:
     model = torch.load(f)
 
+sys.stderr.write('Testing model\n')
 # Run on test data.
 test_loss = test_evaluate(test_sents, test_data)
 print('=' * 89)
