@@ -64,7 +64,30 @@ if torch.cuda.is_available():
 # Load data
 ###############################################################################
 
-corpus = data.Corpus(args.data, args.save_data)
+def pad(tensor, length):
+    return torch.cat([tensor, tensor.new(length - tensor.size(0), *tensor.size()[1:]).zero_()])
+
+def batchify_sents(data_source, sents):
+    # Find longest sequence in data
+    lens = [len(s)+1 for s in sents]
+    maxlen = max(lens)
+    for s in sents[:2]:
+        print(s)
+    print(maxlen)
+    for s in data_source[:2]:
+        thiss = pad(s.unsqueeze(0),maxlen)
+        print(str(type(thiss))+' '+str(thiss.size()))
+    sentdata = torch.cat([pad(s.unsqueeze(0),maxlen) for s in data_source[:2]])
+    # Work out how cleanly we can divide the dataset into bsz parts.
+#    nbatch = data.size(0) // bsz
+    # Trim off any extra elements that wouldn't cleanly fit (remainders).
+#    data = data.narrow(0, 0, nbatch * bsz)
+    # Evenly divide the data across the bsz batches.
+#    data = data.view(bsz, -1).t().contiguous()
+    if args.cuda:
+        sentdata = sentdata.cuda()
+    print('obtained type: '+str(type(sentdata))+' '+str(sentdata.size()))
+    return sentdata
 
 def batchify(data, bsz):
     # Work out how cleanly we can divide the dataset into bsz parts.
@@ -75,21 +98,28 @@ def batchify(data, bsz):
     data = data.view(bsz, -1).t().contiguous()
     if args.cuda:
         data = data.cuda()
+    print('needed type: '+str(type(data))+' '+str(data.size()))
     return data
-    
-eval_batch_size = 10
+
+
+#eval_batch_size = 10
 sys.stderr.write('Reading data\n')
+oldcorpus = data.Corpus(path=args.data, save_to=args.save_data)
+corpus = data.SentenceCorpus(path=args.data, save_to=args.save_data, testflag=args.test)
 
 # TODO: Training needs to be at the sentence level like test
 # TODO: Could batchify over training sentences by padding to longest
 # TODO: If we do the above, we could get rid of the batch_size vars
-train_data = batchify(corpus.train, args.batch_size)
-val_data = batchify(corpus.valid, eval_batch_size)
+if not args.test:
+    train_data = batchify(oldcorpus.train, args.batch_size)
+    train_sents, train_data = batchify_sents(corpus.train[1], corpus.train[0])
+    val_sents, val_data = batchify_sents(corpus.valid[1], corpus.valid[0])
+else:
+    # NOTE: Batchify is inefficient or lossy for test time
+    test_sents, test_data = corpus.test
 
-# NOTE: Batchify is inefficient or lossy for test time
-test_corpus = data.TestCorpus(args.data, args.load_data)
-test_sents, test_data = test_corpus.test
-
+raise()
+    
 # TODO: We shouldn't need to read in all the corpora every time.
 # We could save the vocab to a file and
 #    just load in that file if given that param
