@@ -65,7 +65,9 @@ if torch.cuda.is_available():
 ###############################################################################
 
 def pad(tensor, length):
-    return torch.cat([tensor, tensor.new(length - tensor.size(0), *tensor.size()[1:]).zero_()])
+    ## Pad each tensor out to the given length with target values of -100
+    ## By default, pytorch ignores target values of -100 when computing gradients
+    return torch.cat([tensor, tensor.new(length - tensor.size(0), *tensor.size()[1:]).fill_(-100)])
 
 def batchify_sents(data_source, sents):
     # Find longest sequence in data
@@ -100,15 +102,13 @@ corpus = data.SentenceCorpus(path=args.data, save_to=args.save_data, testflag=ar
 # TODO: Could batchify over training sentences by padding to longest
 # TODO: If we do the above, we could get rid of the batch_size vars
 if not args.test:
-    train_data = batchify(oldcorpus.train, args.batch_size)
+    #train_data = batchify(oldcorpus.train, args.batch_size)
     train_sents, train_data = batchify_sents(corpus.train[1], corpus.train[0])
     val_sents, val_data = batchify_sents(corpus.valid[1], corpus.valid[0])
 else:
     # NOTE: Batchify is inefficient or lossy for test time
     test_sents, test_data = corpus.test
 
-raise()
-    
 # TODO: We shouldn't need to read in all the corpora every time.
 # We could save the vocab to a file and
 #    just load in that file if given that param
@@ -179,30 +179,30 @@ def test_evaluate(test_sentences, data_source):
         hidden = repackage_hidden(hidden)
     return total_loss[0] / len(data_source)
 
-def evaluate(data_source):
-    # Turn on evaluation mode which disables dropout.
-    model.eval()
-    total_loss = 0
-    ntokens = len(corpus.dictionary)
-    hidden = model.init_hidden(eval_batch_size)
-    for i in range(0, data_source.size(0) - 1, args.bptt):
-        data, targets = get_batch(data_source, i, evaluation=True)
-        output, hidden = model(data, hidden)
-        output_flat = output.view(-1, ntokens)
-        curr_loss = len(data) * criterion(output_flat, targets).data
-        total_loss += curr_loss
-        hidden = repackage_hidden(hidden)
-    return total_loss[0] / len(data_source)
+#def evaluate(data_source):
+#    # Turn on evaluation mode which disables dropout.
+#    model.eval()
+#    total_loss = 0
+#    ntokens = len(corpus.dictionary)
+#    hidden = model.init_hidden(eval_batch_size)
+#    for i in range(0, data_source.size(0) - 1, args.bptt):
+#        data, targets = get_batch(data_source, i, evaluation=True)
+#        output, hidden = model(data, hidden)
+#        output_flat = output.view(-1, ntokens)
+#        curr_loss = len(data) * criterion(output_flat, targets).data
+#        total_loss += curr_loss
+#        hidden = repackage_hidden(hidden)
+#    return total_loss[0] / len(data_source)
 
-
-def train():
+def train_on_sents(train_sents, train_data):
     # Turn on training mode which enables dropout.
     model.train()
     total_loss = 0
     start_time = time.time()
     ntokens = len(corpus.dictionary)
-    hidden = model.init_hidden(args.batch_size)
+    hidden = model.init_hidden(train_data.size(0)-1) #args.batch_size)
     for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
+        ## The language model is only trained with a max sequence length of args.bptt
         data, targets = get_batch(train_data, i)
         # Starting each batch, we detach the hidden state from how it was previously produced.
         # If we didn't, the model would try backpropagating all the way to start of the dataset.
@@ -229,6 +229,40 @@ def train():
             total_loss = 0
             start_time = time.time()
 
+#def train():
+#    # Turn on training mode which enables dropout.
+#    model.train()
+#    total_loss = 0
+#    start_time = time.time()
+#    ntokens = len(corpus.dictionary)
+#    hidden = model.init_hidden(args.batch_size)
+#    for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
+#        data, targets = get_batch(train_data, i)
+#        # Starting each batch, we detach the hidden state from how it was previously produced.
+#        # If we didn't, the model would try backpropagating all the way to start of the dataset.
+#        hidden = repackage_hidden(hidden)
+#        model.zero_grad()
+#        output, hidden = model(data, hidden)
+#        loss = criterion(output.view(-1, ntokens), targets)
+#        loss.backward()
+#
+#        # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
+#        torch.nn.utils.clip_grad_norm(model.parameters(), args.clip)
+#        for p in model.parameters():
+#            p.data.add_(-lr, p.grad.data)
+#
+#        total_loss += loss.data
+#
+#        if batch % args.log_interval == 0 and batch > 0:
+#            cur_loss = total_loss[0] / args.log_interval
+#            elapsed = time.time() - start_time
+#            print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.2f} | ms/batch {:5.2f} | '
+#                    'loss {:5.2f} | ppl {:8.2f}'.format(
+#                epoch, batch, len(train_data) // args.bptt, lr,
+#                elapsed * 1000 / args.log_interval, cur_loss, math.exp(cur_loss)))
+#            total_loss = 0
+#            start_time = time.time()
+
 # Loop over epochs.
 lr = args.lr
 best_val_loss = None
@@ -238,12 +272,13 @@ if not args.test:
     timer = 5
     sys.stderr.write('Training model in 5 seconds (Ctrl+C to abort)\n')
     while timer > 0:
-        time.sleep(5)
+        time.sleep(1)
+        timer -= 1
     sys.stderr.write('Training model now\n')
     try:
         for epoch in range(1, args.epochs+1):
             epoch_start_time = time.time()
-            train()
+            train_on_sents(train_sents, train_data)
             val_loss = evaluate(val_data)
             print('-' * 89)
             print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
