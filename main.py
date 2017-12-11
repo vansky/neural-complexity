@@ -71,23 +71,12 @@ def batchify_sents(data_source, sents):
     # Find longest sequence in data
     lens = [len(s)+1 for s in sents]
     maxlen = max(lens)
-    for s in sents[:2]:
-        print(s)
-    print(maxlen)
-    for s in data_source[:2]:
-        thiss = pad(s.unsqueeze(0),maxlen)
-        print(str(type(thiss))+' '+str(thiss.size()))
-    sentdata = torch.cat([pad(s.unsqueeze(0),maxlen) for s in data_source[:2]])
-    # Work out how cleanly we can divide the dataset into bsz parts.
-#    nbatch = data.size(0) // bsz
-    # Trim off any extra elements that wouldn't cleanly fit (remainders).
-#    data = data.narrow(0, 0, nbatch * bsz)
-    # Evenly divide the data across the bsz batches.
-#    data = data.view(bsz, -1).t().contiguous()
+    # Pad other sentences out to the length of the longest sentence
+    sentdata = torch.cat([pad(s,maxlen).unsqueeze(0) for s in data_source])
     if args.cuda:
         sentdata = sentdata.cuda()
-    print('obtained type: '+str(type(sentdata))+' '+str(sentdata.size()))
-    return sentdata
+    #print('obtained type: '+str(type(sentdata))+' '+str(sentdata.size()))
+    return (sents,sentdata)
 
 def batchify(data, bsz):
     # Work out how cleanly we can divide the dataset into bsz parts.
@@ -98,7 +87,7 @@ def batchify(data, bsz):
     data = data.view(bsz, -1).t().contiguous()
     if args.cuda:
         data = data.cuda()
-    print('needed type: '+str(type(data))+' '+str(data.size()))
+    #print('needed type: '+str(type(data))+' '+str(data.size()))
     return data
 
 
@@ -148,7 +137,6 @@ def repackage_hidden(h):
     else:
         return tuple(repackage_hidden(v) for v in h)
 
-
 def test_get_batch(source, evaluation=False):
     # This version of get_batch preps all the data as a single batch
     data = Variable(source[:-1], volatile=evaluation)
@@ -161,7 +149,6 @@ def get_batch(source, i, evaluation=False):
     data = Variable(source[i:i+seq_len], volatile=evaluation)
     target = Variable(source[i+1:i+1+seq_len].view(-1))
     return data, target
-
 
 def test_evaluate(test_sentences, data_source):
     # Turn on evaluation mode which disables dropout.
