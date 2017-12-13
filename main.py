@@ -69,16 +69,28 @@ def pad(tensor, length):
     ## By default, pytorch ignores target values of -100 when computing gradients
     return torch.cat([tensor, tensor.new(length - tensor.size(0), *tensor.size()[1:]).fill_(-100)])
 
-def batchify_sents(data_source, sents):
+def batchify_sents(data, sents, bsz):
+    # How many sentences should we fit completely into each sequence (column) given this batchsize?
+    nsents = math.ceil(len(sents) / bsz)
     # Find longest sequence in data
     lens = [len(s)+1 for s in sents]
-    maxlen = max(lens)
-    # Pad other sentences out to the length of the longest sentence
-    sentdata = torch.cat([pad(s,maxlen).unsqueeze(0) for s in data_source])
+    # Add args.bptt to the sentence length to diminish the influence of one sentence on the next
+    # TODO: Test the influence of adding this by comparing perplexity models with and without this addition
+    slen = max(lens)+args.bptt
+    # Work out how long each sequence should be after batchification
+    nrows = nsents * slen
+    # Determine padding needed at end of data
+    padrows = nrows * bsz
+    # Pad sentences out to the length of the longest sentence
+    data = torch.cat([pad(s,slen) for s in data])
+    # Add extra padding rows to end of data
+    data = pad(data,padrows)
+    # Evenly divide the data across the bsz batches.
+    data = data.view(bsz, -1).t().contiguous()
     if args.cuda:
-        sentdata = sentdata.cuda()
-    print('obtained type: '+str(type(sentdata))+' '+str(sentdata.size()))
-    return (sents,sentdata)
+        data = data.cuda()
+    print('obtained type: '+str(type(data))+' '+str(data.size()))
+    return (sents,data)
 
 def batchify(data, bsz):
     # Work out how cleanly we can divide the dataset into bsz parts.
@@ -93,7 +105,7 @@ def batchify(data, bsz):
     return data
 
 
-#eval_batch_size = 10
+eval_batch_size = 10
 sys.stderr.write('Reading data\n')
 oldcorpus = data.Corpus(path=args.data, save_to=args.save_data)
 corpus = data.SentenceCorpus(path=args.data, save_to=args.save_data, testflag=args.test)
@@ -103,8 +115,9 @@ corpus = data.SentenceCorpus(path=args.data, save_to=args.save_data, testflag=ar
 # TODO: If we do the above, we could get rid of the batch_size vars
 if not args.test:
     train_data = batchify(oldcorpus.train, args.batch_size)
-    train_sents, train_data = batchify_sents(corpus.train[1], corpus.train[0])
-    val_sents, val_data = batchify_sents(corpus.valid[1], corpus.valid[0])
+    #val_data = batchify(oldcorpus.valid, eval_batch_size)
+    train_sents, train_data = batchify_sents(corpus.train[1], corpus.train[0], args.batch_size)
+    val_sents, val_data = batchify_sents(corpus.valid[1], corpus.valid[0], eval_batch_size)
 else:
     # NOTE: Batchify is inefficient or lossy for test time
     test_sents, test_data = corpus.test
@@ -285,8 +298,9 @@ if not args.test:
             epoch_start_time = time.time()
             train()
             #train_on_sents(train_sents, train_data)
-            #raise()
+            raise()
             val_loss = test_evaluate(val_sents, val_data)
+            #val_loss = test_evaluate(val_sents, val_data)
             print('-' * 89)
             print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
                   'valid ppl {:8.2f}'.format(epoch, (time.time() - epoch_start_time),
