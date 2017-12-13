@@ -77,7 +77,7 @@ def batchify_sents(data_source, sents):
     sentdata = torch.cat([pad(s,maxlen).unsqueeze(0) for s in data_source])
     if args.cuda:
         sentdata = sentdata.cuda()
-    #print('obtained type: '+str(type(sentdata))+' '+str(sentdata.size()))
+    print('obtained type: '+str(type(sentdata))+' '+str(sentdata.size()))
     return (sents,sentdata)
 
 def batchify(data, bsz):
@@ -89,7 +89,7 @@ def batchify(data, bsz):
     data = data.view(bsz, -1).t().contiguous()
     if args.cuda:
         data = data.cuda()
-    #print('needed type: '+str(type(data))+' '+str(data.size()))
+    print('needed type: '+str(type(data))+' '+str(data.size()))
     return data
 
 
@@ -102,7 +102,7 @@ corpus = data.SentenceCorpus(path=args.data, save_to=args.save_data, testflag=ar
 # TODO: Could batchify over training sentences by padding to longest
 # TODO: If we do the above, we could get rid of the batch_size vars
 if not args.test:
-    #train_data = batchify(oldcorpus.train, args.batch_size)
+    train_data = batchify(oldcorpus.train, args.batch_size)
     train_sents, train_data = batchify_sents(corpus.train[1], corpus.train[0])
     val_sents, val_data = batchify_sents(corpus.valid[1], corpus.valid[0])
 else:
@@ -200,7 +200,9 @@ def train_on_sents(train_sents, train_data):
     total_loss = 0
     start_time = time.time()
     ntokens = len(corpus.dictionary)
-    hidden = model.init_hidden(train_data.size(0)-1) #args.batch_size)
+    hidden = model.init_hidden(train_data.size(1)) #args.batch_size)
+    #print('hidden: '+str(type(hidden[0]))+' '+str(hidden[0].size()))
+    #return(0)
     for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
         ## The language model is only trained with a max sequence length of args.bptt
         data, targets = get_batch(train_data, i)
@@ -229,39 +231,42 @@ def train_on_sents(train_sents, train_data):
             total_loss = 0
             start_time = time.time()
 
-#def train():
-#    # Turn on training mode which enables dropout.
-#    model.train()
-#    total_loss = 0
-#    start_time = time.time()
-#    ntokens = len(corpus.dictionary)
-#    hidden = model.init_hidden(args.batch_size)
-#    for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
-#        data, targets = get_batch(train_data, i)
-#        # Starting each batch, we detach the hidden state from how it was previously produced.
-#        # If we didn't, the model would try backpropagating all the way to start of the dataset.
-#        hidden = repackage_hidden(hidden)
-#        model.zero_grad()
-#        output, hidden = model(data, hidden)
-#        loss = criterion(output.view(-1, ntokens), targets)
-#        loss.backward()
-#
-#        # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
-#        torch.nn.utils.clip_grad_norm(model.parameters(), args.clip)
-#        for p in model.parameters():
-#            p.data.add_(-lr, p.grad.data)
-#
-#        total_loss += loss.data
-#
-#        if batch % args.log_interval == 0 and batch > 0:
-#            cur_loss = total_loss[0] / args.log_interval
-#            elapsed = time.time() - start_time
-#            print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.2f} | ms/batch {:5.2f} | '
-#                    'loss {:5.2f} | ppl {:8.2f}'.format(
-#                epoch, batch, len(train_data) // args.bptt, lr,
-#                elapsed * 1000 / args.log_interval, cur_loss, math.exp(cur_loss)))
-#            total_loss = 0
-#            start_time = time.time()
+def train():
+    # Turn on training mode which enables dropout.
+    model.train()
+    total_loss = 0
+    start_time = time.time()
+    ntokens = len(corpus.dictionary)
+    hidden = model.init_hidden(args.batch_size)
+    print('hidden: '+str(type(hidden[0]))+' '+str(hidden[0].size())) #.size()))
+    #return(0)
+    for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
+        ## The language model is only trained with a max sequence length of args.bptt
+        data, targets = get_batch(train_data, i)
+        # Starting each batch, we detach the hidden state from how it was previously produced.
+        # If we didn't, the model would try backpropagating all the way to start of the dataset.
+        hidden = repackage_hidden(hidden)
+        model.zero_grad()
+        output, hidden = model(data, hidden)
+        loss = criterion(output.view(-1, ntokens), targets)
+        loss.backward()
+
+        # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
+        torch.nn.utils.clip_grad_norm(model.parameters(), args.clip)
+        for p in model.parameters():
+            p.data.add_(-lr, p.grad.data)
+
+        total_loss += loss.data
+
+        if batch % args.log_interval == 0 and batch > 0:
+            cur_loss = total_loss[0] / args.log_interval
+            elapsed = time.time() - start_time
+            print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.2f} | ms/batch {:5.2f} | '
+                    'loss {:5.2f} | ppl {:8.2f}'.format(
+                epoch, batch, len(train_data) // args.bptt, lr,
+                elapsed * 1000 / args.log_interval, cur_loss, math.exp(cur_loss)))
+            total_loss = 0
+            start_time = time.time()
 
 # Loop over epochs.
 lr = args.lr
@@ -278,8 +283,10 @@ if not args.test:
     try:
         for epoch in range(1, args.epochs+1):
             epoch_start_time = time.time()
-            train_on_sents(train_sents, train_data)
-            val_loss = evaluate(val_data)
+            train()
+            #train_on_sents(train_sents, train_data)
+            #raise()
+            val_loss = test_evaluate(val_sents, val_data)
             print('-' * 89)
             print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
                   'valid ppl {:8.2f}'.format(epoch, (time.time() - epoch_start_time),
