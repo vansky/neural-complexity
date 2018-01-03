@@ -1,16 +1,19 @@
 import argparse
 import time
 import math
-import sys
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
+import sys
+import numpy as np
 
 import data
 import model
 
 parser = argparse.ArgumentParser(description='PyTorch RNN/LSTM Language Model')
-parser.add_argument('--data', type=str, default='./data/wikitext-2',
+#parser.add_argument('--testdata', type=str, default='./data/penn',
+#                    help='location of the test corpus')
+parser.add_argument('--data', type=str, default='./data/penn',
                     help='location of the data corpus')
 parser.add_argument('--model', type=str, default='LSTM',
                     help='type of recurrent net (RNN_TANH, RNN_RELU, LSTM, GRU)')
@@ -42,14 +45,16 @@ parser.add_argument('--log-interval', type=int, default=200, metavar='N',
                     help='report interval')
 parser.add_argument('--save', type=str,  default='model.pt',
                     help='path to save the final model')
-parser.add_argument('--wordlevel', action='store_true',
-                    help='output word-level complexity metrics')
+#parser.add_argument('--train', action='store_true',
+#                    help='train a new LM')
 parser.add_argument('--test', action='store_true',
                     help='test a trained LM')
-parser.add_argument('--save_data', type=str, default='lm_data.bin',
+parser.add_argument('--lm_data', type=str, default='lm_data.bin',
                     help='path to save the LM data')
-parser.add_argument('--load_data', type=str, default='lm_data.bin',
-                    help='path to load the LM data')
+#parser.add_argument('--load_data', type=str, default='lm_data.bin',
+#                    help='path to load the LM data')
+parser.add_argument('--words', action='store_true',
+                    help='evaluate word-level complexities (instead of sentence-level loss)')
 args = parser.parse_args()
 
 # Set the random seed manually for reproducibility.
@@ -64,34 +69,6 @@ if torch.cuda.is_available():
 # Load data
 ###############################################################################
 
-def pad(tensor, length):
-    ## Pad each tensor out to the given length with target values of -100
-    ## By default, pytorch ignores target values of -100 when computing gradients
-    return torch.cat([tensor, tensor.new(length - tensor.size(0), *tensor.size()[1:]).fill_(-100)])
-
-def batchify_sents(data, sents, bsz):
-    # How many sentences should we fit completely into each sequence (column) given this batchsize?
-    nsents = math.ceil(len(sents) / bsz)
-    # Find longest sequence in data
-    lens = [len(s)+1 for s in sents]
-    # Add args.bptt to the sentence length to diminish the influence of one sentence on the next
-    # TODO: Test the influence of adding this by comparing perplexity models with and without this addition
-    slen = max(lens)+args.bptt
-    # Work out how long each sequence should be after batchification
-    nrows = nsents * slen
-    # Determine padding needed at end of data
-    padrows = nrows * bsz
-    # Pad sentences out to the length of the longest sentence
-    data = torch.cat([pad(s,slen) for s in data])
-    # Add extra padding rows to end of data
-    data = pad(data,padrows)
-    # Evenly divide the data across the bsz batches.
-    data = data.view(bsz, -1).t().contiguous()
-    if args.cuda:
-        data = data.cuda()
-    print('obtained type: '+str(type(data))+' '+str(data.size()))
-    return (sents,data)
-
 def batchify(data, bsz):
     # Work out how cleanly we can divide the dataset into bsz parts.
     nbatch = data.size(0) // bsz
@@ -101,43 +78,87 @@ def batchify(data, bsz):
     data = data.view(bsz, -1).t().contiguous()
     if args.cuda:
         data = data.cuda()
-    print('needed type: '+str(type(data))+' '+str(data.size()))
     return data
 
-
 eval_batch_size = 10
-sys.stderr.write('Reading data\n')
-oldcorpus = data.Corpus(path=args.data, save_to=args.save_data)
-corpus = data.SentenceCorpus(path=args.data, save_to=args.save_data, testflag=args.test)
+corpus = data.SentenceCorpus(args.data, args.lm_data, args.test)
 
-# TODO: Training needs to be at the sentence level like test
-# TODO: Could batchify over training sentences by padding to longest
-# TODO: If we do the above, we could get rid of the batch_size vars
-if not args.test:
-    train_data = batchify(oldcorpus.train, args.batch_size)
-    #val_data = batchify(oldcorpus.valid, eval_batch_size)
-    train_sents, train_data = batchify_sents(corpus.train[1], corpus.train[0], args.batch_size)
-    val_sents, val_data = batchify_sents(corpus.valid[1], corpus.valid[0], eval_batch_size)
-else:
-    # NOTE: Batchify is inefficient or lossy for test time
+if args.test:
+    #test_corpus = data.TestCorpus(args.testdata, args.load_data)
     test_sents, test_data = corpus.test
-
-# TODO: We shouldn't need to read in all the corpora every time.
-# We could save the vocab to a file and
-#    just load in that file if given that param
-vocab = corpus.dictionary
+else:
+    #corpus = data.Corpus(args.data, args.save_data)
+    #corpus = data.SentenceCorpus(args.data, args.save_data, False)
+    train_data = batchify(corpus.train, args.batch_size)
+    val_data = batchify(corpus.valid, eval_batch_size)
+#    vocab = corpus.dictionary
 
 ###############################################################################
 # Build/load the model
 ###############################################################################
 
-ntokens = len(corpus.dictionary)
 if not args.test:
+    ntokens = len(corpus.dictionary)
     model = model.RNNModel(args.model, ntokens, args.emsize, args.nhid, args.nlayers, args.dropout, args.tied)
     if args.cuda:
         model.cuda()
 
 criterion = nn.CrossEntropyLoss()
+
+###############################################################################
+# Complexity measures
+###############################################################################
+
+def get_entropy(o):
+    ## o should be a vector scoring possible classes
+    #sys.stderr.write('get_H o: '+str(o.size())+'\n')
+    probs = nn.functional.softmax(o,dim=0)
+    #sys.stderr.write('get_H probs: '+str(probs.size())+'\n')
+    logprobs = nn.functional.log_softmax(o,dim=0) #numerically more stable than two separate operations
+    #sys.stderr.write('get_H o: '+str(o)+'\n')
+    #sys.stderr.write('get_H probs: '+str(probs)+'\n')
+    #sys.stderr.write('get_H sum probs: '+str(torch.sum(probs))+'\n')
+    #raise()
+    return -1 * torch.sum(probs * logprobs)
+
+def get_surps(o):
+    ## o should be a vector scoring possible classes
+    logprobs = nn.functional.log_softmax(o,dim=0)
+    return -1 * logprobs
+
+def get_complexity_iter(o,t):
+    for corpuspos,targ in enumerate(t):
+        word = corpus.dictionary.idx2word[targ]
+        surp = get_surps(o[corpuspos])
+        H = get_entropy(o[corpuspos])
+        print(str(word)+' '+str(surp)+' '+str(H))
+
+def get_complexity_apply(o,t,sentid):
+    ## Use apply() method
+    Hs = torch.squeeze(apply(get_entropy,o))
+    surps = apply(get_surps,o)
+    ## Use dimensional indexing method
+    ## NOTE: For some reason, this doesn't work.
+    ##       May marginally speed things if we can determine why
+    ##       Currently 'probs' ends up equivalent to o after the softmax
+    #probs = nn.functional.softmax(o,dim=0)
+    #logprobs = nn.functional.log_softmax(o,dim=0)
+    #Hs = -1 * torch.sum(probs * logprobs),dim=1)
+    #surps = -1 * logprobs
+    ## Move along
+    for corpuspos,targ in enumerate(t):
+        word = corpus.dictionary.idx2word[int(targ)]
+        if word == '<eos>':
+            #don't output the complexity of EOS
+            continue
+        surp = surps[corpuspos][int(targ)]
+        print(str(word)+' '+str(sentid)+' '+str(corpuspos)+' '+str(len(word))+' '+str(float(surp))+' '+str(float(Hs[corpuspos])))
+
+def apply(func, M):
+    ## applies a function along a given dimension
+    tList = [func(m) for m in torch.unbind(M, dim=0) ]
+    res = torch.stack(tList, dim=0)
+    return res
 
 ###############################################################################
 # Training code
@@ -151,13 +172,16 @@ def repackage_hidden(h):
         return tuple(repackage_hidden(v) for v in h)
 
 def test_get_batch(source, evaluation=False):
-    # This version of get_batch preps all the data as a single batch
-    data = Variable(source[:-1], volatile=evaluation)
-    target = Variable(source[1:].view(-1))
+#def test_get_batch(source, i, evaluation=False):
+#    seq_len = min(args.bptt, len(source) - 1 - i)
+#    data = Variable(source[i:i+seq_len], volatile=evaluation)
+#    target = Variable(source[i+1:i+1+seq_len].view(-1))
+    seq_len = len(source) - 1
+    data = Variable(source[:seq_len], volatile=evaluation)
+    target = Variable(source[1:1+seq_len].view(-1))
     return data, target
     
 def get_batch(source, i, evaluation=False):
-    # This version of get_batch preps mini-batches of size args.bptt
     seq_len = min(args.bptt, len(source) - 1 - i)
     data = Variable(source[i:i+seq_len], volatile=evaluation)
     target = Variable(source[i+1:i+1+seq_len].view(-1))
@@ -168,81 +192,49 @@ def test_evaluate(test_sentences, data_source):
     model.eval()
     total_loss = 0
     ntokens = len(corpus.dictionary)
+    if args.words:
+        print('word sentid sentpos wlen surp entropy')
     for i in range(len(data_source)):
         sent_ids = data_source[i]
         sent = test_sentences[i]
+#        sys.stderr.write(str(len(sent.split()))+' '+str(sent_ids.size(0))+'\n')
+#        raise()
         if args.cuda:
             sent_ids = sent_ids.cuda()
+#        hidden = model.init_hidden(min(args.bptt,sent_ids.size(0)-1))
         hidden = model.init_hidden(sent_ids.size(0)-1)
-        # test_get_batch because we want to evaluate the whole sentence
+        # 0 because we want to evaluate the whole sentence
         data, targets = test_get_batch(sent_ids, evaluation=True)
+#        sys.stderr.write(str(type(data))+' '+str(type(targets))+' '+str(type(hidden))+'\n')
+#        sys.stderr.write(str(sent_ids)+'\n')
+#        sys.stderr.write(str(data.size())+' '+str(targets.size())+' '+str(hidden[0].size())+'\n')
         data=data.unsqueeze(0)
         output, hidden = model(data, hidden)
         output_flat = output.view(-1, ntokens)
         curr_loss = len(data) * criterion(output_flat, targets).data
         total_loss += curr_loss
-        if args.wordlevel:
-            print('sent: '+sent)
-            print('type(output_flat): '+str(type(output_flat)))
-            print('output_flat.shape: '+str(output_flat.shape))
-            #for wix, word in sent.split():
-            raise()
+        if args.words:
+            get_complexity_apply(output_flat,targets,i)
         else:
-            print(sent+":"+' '+str(curr_loss[0]))
+            # output sentence-level loss
+            print(str(sent)+":"+str(curr_loss[0]))
         hidden = repackage_hidden(hidden)
     return total_loss[0] / len(data_source)
 
-#def evaluate(data_source):
-#    # Turn on evaluation mode which disables dropout.
-#    model.eval()
-#    total_loss = 0
-#    ntokens = len(corpus.dictionary)
-#    hidden = model.init_hidden(eval_batch_size)
-#    for i in range(0, data_source.size(0) - 1, args.bptt):
-#        data, targets = get_batch(data_source, i, evaluation=True)
-#        output, hidden = model(data, hidden)
-#        output_flat = output.view(-1, ntokens)
-#        curr_loss = len(data) * criterion(output_flat, targets).data
-#        total_loss += curr_loss
-#        hidden = repackage_hidden(hidden)
-#    return total_loss[0] / len(data_source)
-
-def train_on_sents(train_sents, train_data):
-    # Turn on training mode which enables dropout.
-    model.train()
+def evaluate(data_source):
+    # Turn on evaluation mode which disables dropout.
+    model.eval()
     total_loss = 0
-    start_time = time.time()
     ntokens = len(corpus.dictionary)
-    hidden = model.init_hidden(train_data.size(1)) #args.batch_size)
-    #print('hidden: '+str(type(hidden[0]))+' '+str(hidden[0].size()))
-    #return(0)
-    for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
-        ## The language model is only trained with a max sequence length of args.bptt
-        data, targets = get_batch(train_data, i)
-        # Starting each batch, we detach the hidden state from how it was previously produced.
-        # If we didn't, the model would try backpropagating all the way to start of the dataset.
-        hidden = repackage_hidden(hidden)
-        model.zero_grad()
+    hidden = model.init_hidden(eval_batch_size)
+    for i in range(0, data_source.size(0) - 1, args.bptt):
+        data, targets = get_batch(data_source, i, evaluation=True)
         output, hidden = model(data, hidden)
-        loss = criterion(output.view(-1, ntokens), targets)
-        loss.backward()
-
-        # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
-        torch.nn.utils.clip_grad_norm(model.parameters(), args.clip)
-        for p in model.parameters():
-            p.data.add_(-lr, p.grad.data)
-
-        total_loss += loss.data
-
-        if batch % args.log_interval == 0 and batch > 0:
-            cur_loss = total_loss[0] / args.log_interval
-            elapsed = time.time() - start_time
-            print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.2f} | ms/batch {:5.2f} | '
-                    'loss {:5.2f} | ppl {:8.2f}'.format(
-                epoch, batch, len(train_data) // args.bptt, lr,
-                elapsed * 1000 / args.log_interval, cur_loss, math.exp(cur_loss)))
-            total_loss = 0
-            start_time = time.time()
+        output_flat = output.view(-1, ntokens)
+        curr_loss = len(data) * criterion(output_flat, targets).data
+        total_loss += curr_loss
+        hidden = repackage_hidden(hidden)
+    return total_loss[0] / len(data_source)
 
 def train():
     # Turn on training mode which enables dropout.
@@ -251,10 +243,7 @@ def train():
     start_time = time.time()
     ntokens = len(corpus.dictionary)
     hidden = model.init_hidden(args.batch_size)
-    print('hidden: '+str(type(hidden[0]))+' '+str(hidden[0].size())) #.size()))
-    #return(0)
     for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
-        ## The language model is only trained with a max sequence length of args.bptt
         data, targets = get_batch(train_data, i)
         # Starting each batch, we detach the hidden state from how it was previously produced.
         # If we didn't, the model would try backpropagating all the way to start of the dataset.
@@ -287,20 +276,11 @@ best_val_loss = None
 
 # At any point you can hit Ctrl + C to break out of training early.
 if not args.test:
-    timer = 5
-    sys.stderr.write('Training model in 5 seconds (Ctrl+C to abort)\n')
-    while timer > 0:
-        time.sleep(1)
-        timer -= 1
-    sys.stderr.write('Training model now\n')
     try:
         for epoch in range(1, args.epochs+1):
             epoch_start_time = time.time()
             train()
-            #train_on_sents(train_sents, train_data)
-            raise()
-            val_loss = test_evaluate(val_sents, val_data)
-            #val_loss = test_evaluate(val_sents, val_data)
+            val_loss = evaluate(val_data)
             print('-' * 89)
             print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
                   'valid ppl {:8.2f}'.format(epoch, (time.time() - epoch_start_time),
@@ -317,16 +297,14 @@ if not args.test:
     except KeyboardInterrupt:
         print('-' * 89)
         print('Exiting from training early')
+else:
+    # Load the best saved model.
+    with open(args.save, 'rb') as f:
+        model = torch.load(f)
 
-sys.stderr.write('Loading model\n')
-# Load the best saved model.
-with open(args.save, 'rb') as f:
-    model = torch.load(f)
-
-sys.stderr.write('Testing model\n')
-# Run on test data.
-test_loss = test_evaluate(test_sents, test_data)
-print('=' * 89)
-print('| End of training | test loss {:5.2f} | test ppl {:8.2f}'.format(
-    test_loss, math.exp(test_loss)))
-print('=' * 89)
+    # Run on test data.
+    test_loss = test_evaluate(test_sents, test_data)
+    print('=' * 89)
+    print('| End of testing | test loss {:5.2f} | test ppl {:8.2f}'.format(
+        test_loss, math.exp(test_loss)))
+    print('=' * 89)
