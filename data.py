@@ -55,7 +55,7 @@ class SentenceCorpus(object):
             tokens = 0
             for fchunk in f:
                 for line in sent_tokenize(fchunk):
-                    words = ['eos'] + line.split() + ['<eos>']
+                    words = ['<eos>'] + line.split() + ['<eos>']
                     tokens += len(words)
                     for word in words:
                         self.dictionary.add_word(word)
@@ -81,7 +81,7 @@ class SentenceCorpus(object):
             tokens = 0
             for fchunk in f:
                 for line in sent_tokenize(fchunk):
-                    words = ['eos'] + line.split() + ['<eos>']
+                    words = ['<eos>'] + line.split() + ['<eos>']
                     tokens += len(words)
 
         # Tokenize file content
