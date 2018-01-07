@@ -11,8 +11,6 @@ import data
 import model
 
 parser = argparse.ArgumentParser(description='PyTorch RNN/LSTM Language Model')
-#parser.add_argument('--testdata', type=str, default='./data/penn',
-#                    help='location of the test corpus')
 parser.add_argument('--data', type=str, default='./data/penn',
                     help='location of the data corpus')
 parser.add_argument('--model', type=str, default='LSTM',
@@ -45,16 +43,18 @@ parser.add_argument('--log-interval', type=int, default=200, metavar='N',
                     help='report interval')
 parser.add_argument('--save', type=str,  default='model.pt',
                     help='path to save the final model')
-#parser.add_argument('--train', action='store_true',
-#                    help='train a new LM')
 parser.add_argument('--test', action='store_true',
                     help='test a trained LM')
 parser.add_argument('--lm_data', type=str, default='lm_data.bin',
                     help='path to save the LM data')
-#parser.add_argument('--load_data', type=str, default='lm_data.bin',
-#                    help='path to load the LM data')
 parser.add_argument('--words', action='store_true',
                     help='evaluate word-level complexities (instead of sentence-level loss)')
+parser.add_argument('--trainfname', type=str, default='train.txt',
+                    help='name of the training file')
+parser.add_argument('--validfname', type=str, default='valid.txt',
+                    help='name of the validation file')
+parser.add_argument('--testfname', type=str, default='test.txt',
+                    help='name of the test file')
 args = parser.parse_args()
 
 # Set the random seed manually for reproducibility.
@@ -81,7 +81,10 @@ def batchify(data, bsz):
     return data
 
 eval_batch_size = 10
-corpus = data.SentenceCorpus(args.data, args.lm_data, args.test)
+corpus = data.SentenceCorpus(args.data, args.lm_data, args.test,
+                             trainfname=args.trainfname,
+                             validfname=args.validfname,
+                             testfname=args.testfname)
 
 if args.test:
     #test_corpus = data.TestCorpus(args.testdata, args.load_data)
@@ -111,14 +114,8 @@ criterion = nn.CrossEntropyLoss()
 
 def get_entropy(o):
     ## o should be a vector scoring possible classes
-    #sys.stderr.write('get_H o: '+str(o.size())+'\n')
     probs = nn.functional.softmax(o,dim=0)
-    #sys.stderr.write('get_H probs: '+str(probs.size())+'\n')
     logprobs = nn.functional.log_softmax(o,dim=0) #numerically more stable than two separate operations
-    #sys.stderr.write('get_H o: '+str(o)+'\n')
-    #sys.stderr.write('get_H probs: '+str(probs)+'\n')
-    #sys.stderr.write('get_H sum probs: '+str(torch.sum(probs))+'\n')
-    #raise()
     return -1 * torch.sum(probs * logprobs)
 
 def get_surps(o):
@@ -172,10 +169,6 @@ def repackage_hidden(h):
         return tuple(repackage_hidden(v) for v in h)
 
 def test_get_batch(source, evaluation=False):
-#def test_get_batch(source, i, evaluation=False):
-#    seq_len = min(args.bptt, len(source) - 1 - i)
-#    data = Variable(source[i:i+seq_len], volatile=evaluation)
-#    target = Variable(source[i+1:i+1+seq_len].view(-1))
     seq_len = len(source) - 1
     data = Variable(source[:seq_len], volatile=evaluation)
     target = Variable(source[1:1+seq_len].view(-1))
@@ -197,17 +190,11 @@ def test_evaluate(test_sentences, data_source):
     for i in range(len(data_source)):
         sent_ids = data_source[i]
         sent = test_sentences[i]
-#        sys.stderr.write(str(len(sent.split()))+' '+str(sent_ids.size(0))+'\n')
-#        raise()
         if args.cuda:
             sent_ids = sent_ids.cuda()
-#        hidden = model.init_hidden(min(args.bptt,sent_ids.size(0)-1))
         hidden = model.init_hidden(sent_ids.size(0)-1)
         # 0 because we want to evaluate the whole sentence
         data, targets = test_get_batch(sent_ids, evaluation=True)
-#        sys.stderr.write(str(type(data))+' '+str(type(targets))+' '+str(type(hidden))+'\n')
-#        sys.stderr.write(str(sent_ids)+'\n')
-#        sys.stderr.write(str(data.size())+' '+str(targets.size())+' '+str(hidden[0].size())+'\n')
         data=data.unsqueeze(0)
         output, hidden = model(data, hidden)
         output_flat = output.view(-1, ntokens)

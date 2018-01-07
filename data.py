@@ -1,6 +1,7 @@
 import os
 import torch
 import dill
+import gzip
 
 from nltk import sent_tokenize
 
@@ -51,53 +52,95 @@ class SentenceCorpus(object):
         """Tokenizes a text file."""
         assert os.path.exists(path)
         # Add words to the dictionary
-        with open(path, 'r') as f:
-            tokens = 0
-            for fchunk in f:
-                for line in sent_tokenize(fchunk):
-                    words = ['<eos>'] + line.split() + ['<eos>']
-                    tokens += len(words)
-                    for word in words:
-                        self.dictionary.add_word(word)
+        if path[-2:] == 'gz':
+            with gzip.open(path, 'rb') as f:
+                tokens = 0
+                for fchunk in f.readlines():
+                    for line in sent_tokenize(fchunk.decode("utf-8")):
+                        words = ['<eos>'] + line.split() + ['<eos>']
+                        tokens += len(words)
+                        for word in words:
+                            self.dictionary.add_word(word)
 
-        # Tokenize file content
-        with open(path, 'r') as f:
-            ids = torch.LongTensor(tokens)
-            token = 0
-            for fchunk in f:
-                for line in sent_tokenize(fchunk):
-                    words = ['<eos>'] + line.split() + ['<eos>']
-                    for word in words:
-                        ids[token] = self.dictionary.word2idx[word]
-                        token += 1
+            # Tokenize file content
+            with gzip.open(path, 'rb') as f:
+                ids = torch.LongTensor(tokens)
+                token = 0
+                for fchunk in f.readlines():
+                    for line in sent_tokenize(fchunk.decode("utf-8")):
+                        words = ['<eos>'] + line.split() + ['<eos>']
+                        for word in words:
+                            ids[token] = self.dictionary.word2idx[word]
+                            token += 1
+        else:
+            with open(path, 'r') as f:
+                tokens = 0
+                for fchunk in f:
+                    for line in sent_tokenize(fchunk):
+                        words = ['<eos>'] + line.split() + ['<eos>']
+                        tokens += len(words)
+                        for word in words:
+                            self.dictionary.add_word(word)
 
+            # Tokenize file content
+            with open(path, 'r') as f:
+                ids = torch.LongTensor(tokens)
+                token = 0
+                for fchunk in f:
+                    for line in sent_tokenize(fchunk):
+                        words = ['<eos>'] + line.split() + ['<eos>']
+                        for word in words:
+                            ids[token] = self.dictionary.word2idx[word]
+                            token += 1
         return ids
 
     def tokenize_with_unks(self, path):
         """Tokenizes a text file, adding unks if needed."""
         assert os.path.exists(path)
-        # Add words to the dictionary
-        with open(path, 'r') as f:
-            tokens = 0
-            for fchunk in f:
-                for line in sent_tokenize(fchunk):
-                    words = ['<eos>'] + line.split() + ['<eos>']
-                    tokens += len(words)
+        if path[-2:] == 'gz':
+            # Add words to the dictionary
+            with gzip.open(path, 'rb') as f:
+                tokens = 0
+                for fchunk in f.readlines():
+                    for line in sent_tokenize(fchunk.decode("utf-8")):
+                        words = ['<eos>'] + line.split() + ['<eos>']
+                        tokens += len(words)
 
-        # Tokenize file content
-        with open(path, 'r') as f:
-            ids = torch.LongTensor(tokens)
-            token = 0
-            for fchunk in f:
-                for line in sent_tokenize(fchunk):
-                    words = ['<eos>'] + line.split() + ['<eos>']
-                    for word in words:
-                        if word not in self.dictionary.word2idx:
-                            ids[token] = self.dictionary.word2idx["<unk>"]
-                        else:
-                            ids[token] = self.dictionary.word2idx[word]
-                        token += 1
+            # Tokenize file content
+            with gzip.open(path, 'rb') as f:
+                ids = torch.LongTensor(tokens)
+                token = 0
+                for fchunk in f.readlines():
+                    for line in sent_tokenize(fchunk.decode("utf-8")):
+                        words = ['<eos>'] + line.split() + ['<eos>']
+                        for word in words:
+                            if word not in self.dictionary.word2idx:
+                                ids[token] = self.dictionary.word2idx["<unk>"]
+                            else:
+                                ids[token] = self.dictionary.word2idx[word]
+                            token += 1
+        else:
+            # Add words to the dictionary
+            with open(path, 'r') as f:
+                tokens = 0
+                for fchunk in f:
+                    for line in sent_tokenize(fchunk):
+                        words = ['<eos>'] + line.split() + ['<eos>']
+                        tokens += len(words)
 
+            # Tokenize file content
+            with open(path, 'r') as f:
+                ids = torch.LongTensor(tokens)
+                token = 0
+                for fchunk in f:
+                    for line in sent_tokenize(fchunk):
+                        words = ['<eos>'] + line.split() + ['<eos>']
+                        for word in words:
+                            if word not in self.dictionary.word2idx:
+                                ids[token] = self.dictionary.word2idx["<unk>"]
+                            else:
+                                ids[token] = self.dictionary.word2idx[word]
+                            token += 1
         return ids
 
     def sent_tokenize_with_unks(self, path):
@@ -105,22 +148,40 @@ class SentenceCorpus(object):
         assert os.path.exists(path)
         all_ids = []
         sents = []
-        with open(path, 'r') as f:
-            for fchunk in f:
-                for line in sent_tokenize(fchunk):
-                    sents.append(line.strip())
-                    words = ['<eos>'] + line.split() + ['<eos>']
-                    tokens = len(words)
-    
-                    # tokenize file content
-                    ids = torch.LongTensor(tokens)
-                    token = 0
-                    for word in words:
-                        if word not in self.dictionary.word2idx:
-                            ids[token] = self.dictionary.word2idx["<unk>"]
-                        else:
-                            ids[token] = self.dictionary.word2idx[word]
-                        token += 1
-                    all_ids.append(ids)
+        if path [-2:] == 'gz':
+            with gzip.open(path, 'rb') as f:
+                for fchunk in f.readlines():
+                    for line in sent_tokenize(fchunk.decode("utf-8")):
+                        sents.append(line.strip())
+                        words = ['<eos>'] + line.split() + ['<eos>']
+                        tokens = len(words)
+
+                        # tokenize file content
+                        ids = torch.LongTensor(tokens)
+                        token = 0
+                        for word in words:
+                            if word not in self.dictionary.word2idx:
+                                ids[token] = self.dictionary.word2idx["<unk>"]
+                            else:
+                                ids[token] = self.dictionary.word2idx[word]
+                            token += 1
+                        all_ids.append(ids)
+        else:
+            with open(path, 'r') as f:
+                for fchunk in f:
+                    for line in sent_tokenize(fchunk):
+                        sents.append(line.strip())
+                        words = ['<eos>'] + line.split() + ['<eos>']
+                        tokens = len(words)
+
+                        # tokenize file content
+                        ids = torch.LongTensor(tokens)
+                        token = 0
+                        for word in words:
+                            if word not in self.dictionary.word2idx:
+                                ids[token] = self.dictionary.word2idx["<unk>"]
+                            else:
+                                ids[token] = self.dictionary.word2idx[word]
+                            token += 1
+                        all_ids.append(ids)                
         return (sents, all_ids)
-    
