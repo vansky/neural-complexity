@@ -10,6 +10,13 @@ import numpy as np
 import data
 import model
 
+## Parallelization notes:
+##   Does not currently operate across multiple nodes
+##   Single GPU is better for default: tied,emsize:200,nhid:200,nlayers:2,dropout:0.2
+##      
+##   Multiple GPUs are better for tied,emsize:1500,nhid:1500,nlayers:2,dropout:0.65
+##      4 GPUs train on wikitext-2 in 1/2 - 2/3 the time of 1 GPU
+
 parser = argparse.ArgumentParser(description='PyTorch RNN/LSTM Language Model')
 parser.add_argument('--data', type=str, default='./data/penn',
                     help='location of the data corpus')
@@ -45,6 +52,8 @@ parser.add_argument('--save', type=str,  default='model.pt',
                     help='path to save the final model')
 parser.add_argument('--test', action='store_true',
                     help='test a trained LM')
+parser.add_argument('--single', action='store_true',
+                    help='use only a single GPU (even if more are available)')
 parser.add_argument('--lm_data', type=str, default='lm_data.bin',
                     help='path to save the LM data')
 parser.add_argument('--words', action='store_true',
@@ -76,8 +85,9 @@ def batchify(data, bsz):
     data = data.narrow(0, 0, nbatch * bsz)
     # Evenly divide the data across the bsz batches.
     data = data.view(bsz, -1).t().contiguous()
-    if args.cuda:
-        data = data.cuda()
+    # Turning the data over to CUDA at this point may lead to more OOM errors
+    #if args.cuda:
+    #    data = data.cuda()
     return data
 
 eval_batch_size = 10
@@ -87,14 +97,10 @@ corpus = data.SentenceCorpus(args.data, args.lm_data, args.test,
                              testfname=args.testfname)
 
 if args.test:
-    #test_corpus = data.TestCorpus(args.testdata, args.load_data)
     test_sents, test_data = corpus.test
 else:
-    #corpus = data.Corpus(args.data, args.save_data)
-    #corpus = data.SentenceCorpus(args.data, args.save_data, False)
     train_data = batchify(corpus.train, args.batch_size)
     val_data = batchify(corpus.valid, eval_batch_size)
-#    vocab = corpus.dictionary
 
 ###############################################################################
 # Build/load the model
@@ -104,6 +110,9 @@ if not args.test:
     ntokens = len(corpus.dictionary)
     model = model.RNNModel(args.model, ntokens, args.emsize, args.nhid, args.nlayers, args.dropout, args.tied)
     if args.cuda:
+        if (not args.single) and (torch.cuda.device_count() > 1):
+            # Scatters minibatches (in dim=1) across available GPUs
+            model = nn.DataParallel(model,dim=1)
         model.cuda()
 
 criterion = nn.CrossEntropyLoss()
@@ -172,13 +181,21 @@ def test_get_batch(source, evaluation=False):
     seq_len = len(source) - 1
     data = Variable(source[:seq_len], volatile=evaluation)
     target = Variable(source[1:1+seq_len].view(-1))
-    return data, target
+    # This is where data should be CUDA-fied to lessen OOM errors
+    if args.cuda:
+        return data.cuda(), target.cuda()
+    else:
+        return data, target
     
 def get_batch(source, i, evaluation=False):
     seq_len = min(args.bptt, len(source) - 1 - i)
     data = Variable(source[i:i+seq_len], volatile=evaluation)
     target = Variable(source[i+1:i+1+seq_len].view(-1))
-    return data, target
+    # This is where data should be CUDA-fied to lessen OOM errors
+    if args.cuda:
+        return data.cuda(), target.cuda()
+    else:
+        return data, target
 
 def test_evaluate(test_sentences, data_source):
     # Turn on evaluation mode which disables dropout.
@@ -190,10 +207,15 @@ def test_evaluate(test_sentences, data_source):
     for i in range(len(data_source)):
         sent_ids = data_source[i]
         sent = test_sentences[i]
+
         if args.cuda:
             sent_ids = sent_ids.cuda()
-        hidden = model.init_hidden(sent_ids.size(0)-1)
-        # 0 because we want to evaluate the whole sentence
+
+        if (not args.single) and (torch.cuda.device_count() > 1):
+            #"module" is necessary when using DataParallel
+            hidden = model.module.init_hidden(sent_ids.size(0)-1)
+        else:
+            hidden = model.init_hidden(sent_ids.size(0)-1)
         data, targets = test_get_batch(sent_ids, evaluation=True)
         data=data.unsqueeze(0)
         output, hidden = model(data, hidden)
@@ -213,7 +235,11 @@ def evaluate(data_source):
     model.eval()
     total_loss = 0
     ntokens = len(corpus.dictionary)
-    hidden = model.init_hidden(eval_batch_size)
+    if (not args.single) and (torch.cuda.device_count() > 1):
+        #"module" is necessary when using DataParallel
+        hidden = model.module.init_hidden(eval_batch_size)
+    else:
+        hidden = model.init_hidden(eval_batch_size)
     for i in range(0, data_source.size(0) - 1, args.bptt):
         data, targets = get_batch(data_source, i, evaluation=True)
         output, hidden = model(data, hidden)
@@ -229,7 +255,11 @@ def train():
     total_loss = 0
     start_time = time.time()
     ntokens = len(corpus.dictionary)
-    hidden = model.init_hidden(args.batch_size)
+    if (not args.single) and (torch.cuda.device_count() > 1):
+        #"module" is necessary when using DataParallel
+        hidden = model.module.init_hidden(args.batch_size)
+    else:
+        hidden = model.init_hidden(args.batch_size)
     for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
         data, targets = get_batch(train_data, i)
         # Starting each batch, we detach the hidden state from how it was previously produced.
