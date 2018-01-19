@@ -55,9 +55,14 @@ class SentenceCorpus(object):
         if path[-2:] == 'gz':
             with gzip.open(path, 'rb') as f:
                 tokens = 0
+                FIRST = True
                 for fchunk in f.readlines():
                     for line in sent_tokenize(fchunk.decode("utf-8")):
-                        words = ['<eos>'] + line.split() + ['<eos>']
+                        if FIRST:
+                            words = ['<eos>'] + line.split() + ['<eos>']
+                            FIRST = False
+                        else:
+                            words = line.split() + ['<eos>']
                         tokens += len(words)
                         for word in words:
                             self.dictionary.add_word(word)
@@ -66,18 +71,28 @@ class SentenceCorpus(object):
             with gzip.open(path, 'rb') as f:
                 ids = torch.LongTensor(tokens)
                 token = 0
+                FIRST = True
                 for fchunk in f.readlines():
                     for line in sent_tokenize(fchunk.decode("utf-8")):
-                        words = ['<eos>'] + line.split() + ['<eos>']
+                        if FIRST:
+                            words = ['<eos>'] + line.split() + ['<eos>']
+                            FIRST = False
+                        else:
+                            words = line.split() + ['<eos>']
                         for word in words:
                             ids[token] = self.dictionary.word2idx[word]
                             token += 1
         else:
             with open(path, 'r') as f:
                 tokens = 0
+                FIRST = True
                 for fchunk in f:
                     for line in sent_tokenize(fchunk):
-                        words = ['<eos>'] + line.split() + ['<eos>']
+                        if FIRST:
+                            words = ['<eos>'] + line.split() + ['<eos>']
+                            FIRST = False
+                        else:
+                            words = line.split() + ['<eos>']
                         tokens += len(words)
                         for word in words:
                             self.dictionary.add_word(word)
@@ -86,9 +101,14 @@ class SentenceCorpus(object):
             with open(path, 'r') as f:
                 ids = torch.LongTensor(tokens)
                 token = 0
+                FIRST = True
                 for fchunk in f:
                     for line in sent_tokenize(fchunk):
-                        words = ['<eos>'] + line.split() + ['<eos>']
+                        if FIRST:
+                            words = ['<eos>'] + line.split() + ['<eos>']
+                            FIRST = False
+                        else:
+                            words = line.split() + ['<eos>']
                         for word in words:
                             ids[token] = self.dictionary.word2idx[word]
                             token += 1
@@ -101,18 +121,28 @@ class SentenceCorpus(object):
             # Add words to the dictionary
             with gzip.open(path, 'rb') as f:
                 tokens = 0
+                FIRST = True
                 for fchunk in f.readlines():
                     for line in sent_tokenize(fchunk.decode("utf-8")):
-                        words = ['<eos>'] + line.split() + ['<eos>']
+                        if FIRST:
+                            words = ['<eos>'] + line.split() + ['<eos>']
+                            FIRST = False
+                        else:
+                            words = line.split() + ['<eos>']
                         tokens += len(words)
 
             # Tokenize file content
             with gzip.open(path, 'rb') as f:
                 ids = torch.LongTensor(tokens)
                 token = 0
+                FIRST = True
                 for fchunk in f.readlines():
                     for line in sent_tokenize(fchunk.decode("utf-8")):
-                        words = ['<eos>'] + line.split() + ['<eos>']
+                        if FIRST:
+                            words = ['<eos>'] + line.split() + ['<eos>']
+                            FIRST = False
+                        else:
+                            words = line.split() + ['<eos>']
                         for word in words:
                             if word not in self.dictionary.word2idx:
                                 ids[token] = self.dictionary.word2idx["<unk>"]
@@ -123,18 +153,28 @@ class SentenceCorpus(object):
             # Add words to the dictionary
             with open(path, 'r') as f:
                 tokens = 0
+                FIRST = True
                 for fchunk in f:
                     for line in sent_tokenize(fchunk):
-                        words = ['<eos>'] + line.split() + ['<eos>']
+                        if FIRST:
+                            words = ['<eos>'] + line.split() + ['<eos>']
+                            FIRST = False
+                        else:
+                            words = line.split() + ['<eos>']
                         tokens += len(words)
 
             # Tokenize file content
             with open(path, 'r') as f:
                 ids = torch.LongTensor(tokens)
                 token = 0
+                FIRST = True
                 for fchunk in f:
                     for line in sent_tokenize(fchunk):
-                        words = ['<eos>'] + line.split() + ['<eos>']
+                        if FIRST:
+                            words = ['<eos>'] + line.split() + ['<eos>']
+                            FIRST = False
+                        else:
+                            words = line.split() + ['<eos>']
                         for word in words:
                             if word not in self.dictionary.word2idx:
                                 ids[token] = self.dictionary.word2idx["<unk>"]

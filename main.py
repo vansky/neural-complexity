@@ -6,9 +6,12 @@ import torch.nn as nn
 from torch.autograd import Variable
 import sys
 import numpy as np
+#import Decimal #TODO: need to install Decimal
 
 import data
 import model
+
+sys.stderr.write('Libraries loaded\n')
 
 ## Parallelization notes:
 ##   Does not currently operate across multiple nodes
@@ -46,6 +49,12 @@ parser.add_argument('--seed', type=int, default=1111,
                     help='random seed')
 parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
+parser.add_argument('--guess', action='store_true',
+                    help='display best guesses at each time step')
+parser.add_argument('--guessscores', action='store_true',
+                    help='display guess scores along with guesses')
+parser.add_argument('--guessn', type=int, default=1,
+                    help='output top n guesses')
 parser.add_argument('--log-interval', type=int, default=200, metavar='N',
                     help='report interval')
 parser.add_argument('--save', type=str,  default='model.pt',
@@ -132,6 +141,31 @@ def get_surps(o):
     logprobs = nn.functional.log_softmax(o,dim=0)
     return -1 * logprobs
 
+def get_guesses(o,scores=False):
+    ## o should be a vector scoring possible classes
+    if args.guessn > 1:
+        guessvals, guessixes = torch.topk(o,args.guessn,0)
+        #print(guessvals.size())
+#        for guessi,guessv in enumerate(guessvals):
+#            if float(guessv) < 0.75*float(guessvals[0]):
+#              #crop values that are less than 75% of max value
+#              if args.cuda:
+#                guessixes[guessi:] = torch.cuda.LongTensor([float('NaN')]*(guessvals.size(0)-guessi))
+##              else:
+##                guessixes[guessi] = torch.LongTensor([float('NaN')])
+#              #break
+    else:
+        guessvals, guessixes = torch.max(o,0)
+    # guessvals are the scores of each input cell
+    # guessixes are the indices of the max cells
+    if scores:
+        return guessvals
+    else:
+        return guessixes
+
+def get_guessscores(o):
+    return get_guesses(o,True)
+
 def get_complexity_iter(o,t):
     for corpuspos,targ in enumerate(t):
         word = corpus.dictionary.idx2word[targ]
@@ -143,6 +177,10 @@ def get_complexity_apply(o,t,sentid):
     ## Use apply() method
     Hs = torch.squeeze(apply(get_entropy,o))
     surps = apply(get_surps,o)
+    if args.guess:
+        guesses = apply(get_guesses, o)
+        guessscores = apply(get_guessscores, o)
+        #print(guesses.size())
     ## Use dimensional indexing method
     ## NOTE: For some reason, this doesn't work.
     ##       May marginally speed things if we can determine why
@@ -158,7 +196,20 @@ def get_complexity_apply(o,t,sentid):
             #don't output the complexity of EOS
             continue
         surp = surps[corpuspos][int(targ)]
-        print(str(word)+' '+str(sentid)+' '+str(corpuspos)+' '+str(len(word))+' '+str(float(surp))+' '+str(float(Hs[corpuspos])))
+        if args.guess:
+          if args.guessn > 1:
+            outputguesses = []
+            for g in range(args.guessn):
+              outputguesses.append(corpus.dictionary.idx2word[int(guesses[corpuspos][g])])
+              if args.guessscores:
+                  ##output scores (ratio of score(x)/score(best guess)
+                  #outputguesses.append("{:.3f}".format(float(guessscores[corpuspos][g])/float(guessscores[corpuspos][0])))
+                  ##output probabilities
+                  outputguesses.append("{:.3f}".format(math.exp(float(nn.functional.log_softmax(guessscores[corpuspos],dim=0)[g]))))
+            outputguesses = ' '.join(outputguesses)
+          else:
+            outputguesses = corpus.dictionary.idx2word[int(guesses[corpuspos])]
+        print(str(word)+' '+str(sentid)+' '+str(corpuspos)+' '+str(len(word))+' '+str(float(surp))+' '+str(float(Hs[corpuspos]))+' '+str(outputguesses))
 
 def apply(func, M):
     ## applies a function along a given dimension
@@ -203,7 +254,13 @@ def test_evaluate(test_sentences, data_source):
     total_loss = 0
     ntokens = len(corpus.dictionary)
     if args.words:
-        print('word sentid sentpos wlen surp entropy')
+        print('word sentid sentpos wlen surp entropy',end='')
+        if args.guess:
+            for i in range(args.guessn):
+                print(' guess'+str(i),end='')
+                if args.guessscores:
+                    print(' gscore'+str(i),end='')
+        sys.stdout.write('\n')
     for i in range(len(data_source)):
         sent_ids = data_source[i]
         sent = test_sentences[i]
