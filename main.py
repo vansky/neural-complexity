@@ -53,6 +53,10 @@ parser.add_argument('--guess', action='store_true',
                     help='display best guesses at each time step')
 parser.add_argument('--guessscores', action='store_true',
                     help='display guess scores along with guesses')
+parser.add_argument('--guessratios', action='store_true',
+                    help='display guess ratios normalized by best guess')
+parser.add_argument('--guessprobs', action='store_true',
+                    help='display guess probs along with guesses')
 parser.add_argument('--guessn', type=int, default=1,
                     help='output top n guesses')
 parser.add_argument('--log-interval', type=int, default=200, metavar='N',
@@ -197,21 +201,19 @@ def get_complexity_apply(o,t,sentid):
             continue
         surp = surps[corpuspos][int(targ)]
         if args.guess:
-          #if args.guessn > 1:
-          if True:
             outputguesses = []
             for g in range(args.guessn):
-              outputguesses.append(corpus.dictionary.idx2word[int(guesses[corpuspos][g])])
-              if args.guessscores:
-                  ##output raw scores
-                  outputguesses.append("{:.3f}".format(float(guessscores[corpuspos][g])))
-                  ##output scores (ratio of score(x)/score(best guess)
-                  #outputguesses.append("{:.3f}".format(float(guessscores[corpuspos][g])/float(guessscores[corpuspos][0])))
-                  ##output probabilities
-                  #outputguesses.append("{:.3f}".format(math.exp(float(nn.functional.log_softmax(guessscores[corpuspos],dim=0)[g]))))
+                outputguesses.append(corpus.dictionary.idx2word[int(guesses[corpuspos][g])])
+                if args.guessscores:
+                    ##output raw scores
+                    outputguesses.append("{:.3f}".format(float(guessscores[corpuspos][g])))
+                elif args.guessratios:
+                    ##output scores (ratio of score(x)/score(best guess)
+                    outputguesses.append("{:.3f}".format(float(guessscores[corpuspos][g])/float(guessscores[corpuspos][0])))
+                elif args.guessprobs:
+                  ##output probabilities ## Currently normalizes probs over N-best list; ideally it'd normalize to probs before getting the N-best
+                  outputguesses.append("{:.3f}".format(math.exp(float(nn.functional.log_softmax(guessscores[corpuspos],dim=0)[g]))))
             outputguesses = ' '.join(outputguesses)
-          else:
-            outputguesses = corpus.dictionary.idx2word[int(guesses[corpuspos])]
         print(str(word)+' '+str(sentid)+' '+str(corpuspos)+' '+str(len(word))+' '+str(float(surp))+' '+str(float(Hs[corpuspos]))+' '+str(outputguesses))
 
 def apply(func, M):
