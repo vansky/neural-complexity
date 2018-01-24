@@ -87,6 +87,18 @@ if torch.cuda.is_available():
 # Load data
 ###############################################################################
 
+# Starting from sequential data, batchify arranges the dataset into columns.
+# For instance, with the alphabet as the sequence and batch size 4, we'd get
+# ┌ a g m s ┐
+# │ b h n t │
+# │ c i o u │
+# │ d j p v │
+# │ e k q w │
+# └ f l r x ┘.
+# These columns are treated as independent by the model, which means that the
+# dependence of e. g. 'g' on 'f' can not be learned, but allows more efficient
+# batch processing.
+
 def batchify(data, bsz):
     # Work out how cleanly we can divide the dataset into bsz parts.
     nbatch = data.size(0) // bsz
@@ -143,19 +155,7 @@ def get_surps(o):
 
 def get_guesses(o,scores=False):
     ## o should be a vector scoring possible classes
-    if args.guessn > 1:
-        guessvals, guessixes = torch.topk(o,args.guessn,0)
-        #print(guessvals.size())
-#        for guessi,guessv in enumerate(guessvals):
-#            if float(guessv) < 0.75*float(guessvals[0]):
-#              #crop values that are less than 75% of max value
-#              if args.cuda:
-#                guessixes[guessi:] = torch.cuda.LongTensor([float('NaN')]*(guessvals.size(0)-guessi))
-##              else:
-##                guessixes[guessi] = torch.LongTensor([float('NaN')])
-#              #break
-    else:
-        guessvals, guessixes = torch.max(o,0)
+    guessvals, guessixes = torch.topk(o,args.guessn,0)
     # guessvals are the scores of each input cell
     # guessixes are the indices of the max cells
     if scores:
@@ -177,10 +177,10 @@ def get_complexity_apply(o,t,sentid):
     ## Use apply() method
     Hs = torch.squeeze(apply(get_entropy,o))
     surps = apply(get_surps,o)
+    
     if args.guess:
         guesses = apply(get_guesses, o)
         guessscores = apply(get_guessscores, o)
-        #print(guesses.size())
     ## Use dimensional indexing method
     ## NOTE: For some reason, this doesn't work.
     ##       May marginally speed things if we can determine why
@@ -197,15 +197,18 @@ def get_complexity_apply(o,t,sentid):
             continue
         surp = surps[corpuspos][int(targ)]
         if args.guess:
-          if args.guessn > 1:
+          #if args.guessn > 1:
+          if True:
             outputguesses = []
             for g in range(args.guessn):
               outputguesses.append(corpus.dictionary.idx2word[int(guesses[corpuspos][g])])
               if args.guessscores:
+                  ##output raw scores
+                  outputguesses.append("{:.3f}".format(float(guessscores[corpuspos][g])))
                   ##output scores (ratio of score(x)/score(best guess)
                   #outputguesses.append("{:.3f}".format(float(guessscores[corpuspos][g])/float(guessscores[corpuspos][0])))
                   ##output probabilities
-                  outputguesses.append("{:.3f}".format(math.exp(float(nn.functional.log_softmax(guessscores[corpuspos],dim=0)[g]))))
+                  #outputguesses.append("{:.3f}".format(math.exp(float(nn.functional.log_softmax(guessscores[corpuspos],dim=0)[g]))))
             outputguesses = ' '.join(outputguesses)
           else:
             outputguesses = corpus.dictionary.idx2word[int(guesses[corpuspos])]
@@ -228,6 +231,16 @@ def repackage_hidden(h):
     else:
         return tuple(repackage_hidden(v) for v in h)
 
+# get_batch subdivides the source data into chunks of length args.bptt.
+# If source is equal to the example output of the batchify function, with
+# a bptt-limit of 2, we'd get the following two Variables for i = 0:
+# ┌ a g m s ┐ ┌ b h n t ┐
+# └ b h n t ┘ └ c i o u ┘
+# Note that despite the name of the function, the subdivison of data is not
+# done along the batch dimension (i.e. dimension 1), since that was handled
+# by the batchify function. The chunks are along dimension 0, corresponding
+# to the seq_len dimension in the LSTM.
+    
 def test_get_batch(source, evaluation=False):
     seq_len = len(source) - 1
     data = Variable(source[:seq_len], volatile=evaluation)
@@ -269,17 +282,18 @@ def test_evaluate(test_sentences, data_source):
             sent_ids = sent_ids.cuda()
 
         if (not args.single) and (torch.cuda.device_count() > 1):
-            #"module" is necessary when using DataParallel
-            hidden = model.module.init_hidden(sent_ids.size(0)-1)
+            # "module" is necessary when using DataParallel
+            hidden = model.module.init_hidden(1) # number of parallel sentences being processed
         else:
-            hidden = model.init_hidden(sent_ids.size(0)-1)
+            hidden = model.init_hidden(1) # number of parallel sentences being processed
         data, targets = test_get_batch(sent_ids, evaluation=True)
-        data=data.unsqueeze(0)
+        data=data.unsqueeze(1) # only needed if there is just a single sentence being processed 
         output, hidden = model(data, hidden)
         output_flat = output.view(-1, ntokens)
         curr_loss = len(data) * criterion(output_flat, targets).data
         total_loss += curr_loss
         if args.words:
+            # output word-level complexity metrics
             get_complexity_apply(output_flat,targets,i)
         else:
             # output sentence-level loss
@@ -313,7 +327,7 @@ def train():
     start_time = time.time()
     ntokens = len(corpus.dictionary)
     if (not args.single) and (torch.cuda.device_count() > 1):
-        #"module" is necessary when using DataParallel
+        # "module" is necessary when using DataParallel
         hidden = model.module.init_hidden(args.batch_size)
     else:
         hidden = model.init_hidden(args.batch_size)
