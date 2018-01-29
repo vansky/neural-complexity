@@ -31,6 +31,10 @@ parser.add_argument('--temperature', type=float, default=1.0,
                     help='temperature - higher will increase diversity')
 parser.add_argument('--log-interval', type=int, default=100,
                     help='reporting interval')
+parser.add_argument('--lm_data', type=str, default='lm_data.bin',
+                    help='path to save the LM data')
+parser.add_argument('--testfname', type=str, default='test.txt',
+                    help='name of the test file')
 args = parser.parse_args()
 
 # Set the random seed manually for reproducibility.
@@ -53,7 +57,9 @@ if args.cuda:
 else:
     model.cpu()
 
-corpus = data.Corpus(args.data)
+corpus = data.SentenceCorpus(args.data, args.lm_data, True,
+                             testfname=args.testfname)
+
 ntokens = len(corpus.dictionary)
 hidden = model.init_hidden(1)
 input = Variable(torch.rand(1, 1).mul(ntokens).long(), volatile=True)
