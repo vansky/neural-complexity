@@ -4,23 +4,12 @@ import math
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
-import sys
-import numpy as np
-#import Decimal #TODO: need to install Decimal
+from progress.bar import Bar
 
 import data
 import model
 
-sys.stderr.write('Libraries loaded\n')
-
-## Parallelization notes:
-##   Does not currently operate across multiple nodes
-##   Single GPU is better for default: tied,emsize:200,nhid:200,nlayers:2,dropout:0.2
-##      
-##   Multiple GPUs are better for tied,emsize:1500,nhid:1500,nlayers:2,dropout:0.65
-##      4 GPUs train on wikitext-2 in 1/2 - 2/3 the time of 1 GPU
-
-parser = argparse.ArgumentParser(description='PyTorch RNN/LSTM Language Model')
+parser = argparse.ArgumentParser(description='PyTorch PennTreeBank RNN/LSTM Language Model')
 parser.add_argument('--data', type=str, default='./data/penn',
                     help='location of the data corpus')
 parser.add_argument('--model', type=str, default='LSTM',
@@ -49,34 +38,18 @@ parser.add_argument('--seed', type=int, default=1111,
                     help='random seed')
 parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
-parser.add_argument('--guess', action='store_true',
-                    help='display best guesses at each time step')
-parser.add_argument('--guessscores', action='store_true',
-                    help='display guess scores along with guesses')
-parser.add_argument('--guessratios', action='store_true',
-                    help='display guess ratios normalized by best guess')
-parser.add_argument('--guessprobs', action='store_true',
-                    help='display guess probs along with guesses')
-parser.add_argument('--guessn', type=int, default=1,
-                    help='output top n guesses')
 parser.add_argument('--log-interval', type=int, default=200, metavar='N',
                     help='report interval')
 parser.add_argument('--save', type=str,  default='model.pt',
                     help='path to save the final model')
+parser.add_argument('--train', action='store_true',
+                    help='train a new LM')
 parser.add_argument('--test', action='store_true',
                     help='test a trained LM')
-parser.add_argument('--single', action='store_true',
-                    help='use only a single GPU (even if more are available)')
-parser.add_argument('--lm_data', type=str, default='lm_data.bin',
+parser.add_argument('--save_data', type=str, default='lm_data.bin',
                     help='path to save the LM data')
-parser.add_argument('--words', action='store_true',
-                    help='evaluate word-level complexities (instead of sentence-level loss)')
-parser.add_argument('--trainfname', type=str, default='train.txt',
-                    help='name of the training file')
-parser.add_argument('--validfname', type=str, default='valid.txt',
-                    help='name of the validation file')
-parser.add_argument('--testfname', type=str, default='test.txt',
-                    help='name of the test file')
+parser.add_argument('--load_data', type=str, default='lm_data.bin',
+                    help='path to load the LM data')
 args = parser.parse_args()
 
 # Set the random seed manually for reproducibility.
@@ -110,34 +83,26 @@ def batchify(data, bsz):
     data = data.narrow(0, 0, nbatch * bsz)
     # Evenly divide the data across the bsz batches.
     data = data.view(bsz, -1).t().contiguous()
-    # Turning the data over to CUDA at this point may lead to more OOM errors
-    #if args.cuda:
-    #    data = data.cuda()
+    if args.cuda:
+        data = data.cuda()
     return data
-
+    
 eval_batch_size = 10
-corpus = data.SentenceCorpus(args.data, args.lm_data, args.test,
-                             trainfname=args.trainfname,
-                             validfname=args.validfname,
-                             testfname=args.testfname)
-
+train_data = batchify(corpus.train, args.batch_size)
+val_data = batchify(corpus.valid, eval_batch_size)
 if args.test:
-    test_sents, test_data = corpus.test
-else:
-    train_data = batchify(corpus.train, args.batch_size)
-    val_data = batchify(corpus.valid, eval_batch_size)
+    test_corpus = data.TestCorpus(args.data, args.load_data)
+    test_sents, test_data = test_corpus.test
+vocab = corpus.dictionary
 
 ###############################################################################
 # Build/load the model
 ###############################################################################
 
+ntokens = len(corpus.dictionary)
 if not args.test:
-    ntokens = len(corpus.dictionary)
     model = model.RNNModel(args.model, ntokens, args.emsize, args.nhid, args.nlayers, args.dropout, args.tied)
     if args.cuda:
-        if (not args.single) and (torch.cuda.device_count() > 1):
-            # Scatters minibatches (in dim=1) across available GPUs
-            model = nn.DataParallel(model,dim=1)
         model.cuda()
 
 criterion = nn.CrossEntropyLoss()
@@ -259,11 +224,8 @@ def get_batch(source, i, evaluation=False):
     seq_len = min(args.bptt, len(source) - 1 - i)
     data = Variable(source[i:i+seq_len], volatile=evaluation)
     target = Variable(source[i+1:i+1+seq_len].view(-1))
-    # This is where data should be CUDA-fied to lessen OOM errors
-    if args.cuda:
-        return data.cuda(), target.cuda()
-    else:
-        return data, target
+    return data, target
+
 
 def test_evaluate(test_sentences, data_source):
     # Turn on evaluation mode which disables dropout.
@@ -278,32 +240,25 @@ def test_evaluate(test_sentences, data_source):
                 if args.guessscores:
                     print(' gscore'+str(i))#,end='')
         sys.stdout.write('\n')
+    bar = Bar('Processing', max=len(data_source))
     for i in range(len(data_source)):
         sent_ids = data_source[i]
         sent = test_sentences[i]
-
         if args.cuda:
             sent_ids = sent_ids.cuda()
-
-        if (not args.single) and (torch.cuda.device_count() > 1):
-            # "module" is necessary when using DataParallel
-            hidden = model.module.init_hidden(1) # number of parallel sentences being processed
-        else:
-            hidden = model.init_hidden(1) # number of parallel sentences being processed
-        data, targets = test_get_batch(sent_ids, evaluation=True)
-        data=data.unsqueeze(1) # only needed if there is just a single sentence being processed 
+        hidden = model.init_hidden(sent_ids.size(0)-1)
+        # 0 because we want to evaluate the whole sentence
+        data, targets = test_get_batch(sent_ids, 0, evaluation=True)
+        data=data.unsqueeze(0)
         output, hidden = model(data, hidden)
         output_flat = output.view(-1, ntokens)
         curr_loss = criterion(output_flat, targets).data
         #curr_loss = len(data) * criterion(output_flat, targets).data # needed if there is more than a single sentence being processed
         total_loss += curr_loss
-        if args.words:
-            # output word-level complexity metrics
-            get_complexity_apply(output_flat,targets,i)
-        else:
-            # output sentence-level loss
-            print(str(sent)+":"+str(curr_loss[0]))
+        print sent,":",curr_loss[0]
         hidden = repackage_hidden(hidden)
+        bar.next()
+    bar.finish()
     return total_loss[0] / len(data_source)
 
 def evaluate(data_source):
@@ -311,11 +266,7 @@ def evaluate(data_source):
     model.eval()
     total_loss = 0
     ntokens = len(corpus.dictionary)
-    if (not args.single) and (torch.cuda.device_count() > 1):
-        #"module" is necessary when using DataParallel
-        hidden = model.module.init_hidden(eval_batch_size)
-    else:
-        hidden = model.init_hidden(eval_batch_size)
+    hidden = model.init_hidden(eval_batch_size)
     for i in range(0, data_source.size(0) - 1, args.bptt):
         data, targets = get_batch(data_source, i, evaluation=True)
         output, hidden = model(data, hidden)
@@ -325,17 +276,14 @@ def evaluate(data_source):
         hidden = repackage_hidden(hidden)
     return total_loss[0] / len(data_source)
 
+
 def train():
     # Turn on training mode which enables dropout.
     model.train()
     total_loss = 0
     start_time = time.time()
     ntokens = len(corpus.dictionary)
-    if (not args.single) and (torch.cuda.device_count() > 1):
-        # "module" is necessary when using DataParallel
-        hidden = model.module.init_hidden(args.batch_size)
-    else:
-        hidden = model.init_hidden(args.batch_size)
+    hidden = model.init_hidden(args.batch_size)
     for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
         data, targets = get_batch(train_data, i)
         # Starting each batch, we detach the hidden state from how it was previously produced.
@@ -390,14 +338,14 @@ if not args.test:
     except KeyboardInterrupt:
         print('-' * 89)
         print('Exiting from training early')
-else:
-    # Load the best saved model.
-    with open(args.save, 'rb') as f:
-        model = torch.load(f)
 
-    # Run on test data.
-    test_loss = test_evaluate(test_sents, test_data)
-    print('=' * 89)
-    print('| End of testing | test loss {:5.2f} | test ppl {:8.2f}'.format(
-        test_loss, math.exp(test_loss)))
-    print('=' * 89)
+# Load the best saved model.
+with open(args.save, 'rb') as f:
+    model = torch.load(f)
+
+# Run on test data.
+test_loss = test_evaluate(test_sents, test_data)
+print('=' * 89)
+print('| End of training | test loss {:5.2f} | test ppl {:8.2f}'.format(
+    test_loss, math.exp(test_loss)))
+print('=' * 89)
