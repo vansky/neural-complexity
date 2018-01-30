@@ -4,6 +4,7 @@ import math
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
+from progress.bar import Bar
 
 import data
 import model
@@ -126,6 +127,7 @@ def test_evaluate(test_sentences, data_source):
     model.eval()
     total_loss = 0
     ntokens = len(corpus.dictionary)
+    bar = Bar('Processing', max=len(data_source))
     for i in range(len(data_source)):
         sent_ids = data_source[i]
         sent = test_sentences[i]
@@ -141,6 +143,8 @@ def test_evaluate(test_sentences, data_source):
         total_loss += curr_loss
         print sent,":",curr_loss[0]
         hidden = repackage_hidden(hidden)
+        bar.next()
+    bar.finish()
     return total_loss[0] / len(data_source)
 
 def evaluate(data_source):
