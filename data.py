@@ -101,7 +101,8 @@ class SentenceCorpus(object):
                 tokens = 0
                 FIRST = True
                 for fchunk in f:
-                    for line in sent_tokenize(fchunk):
+                    #print fchunk
+                    for line in sent_tokenize(fchunk.decode("utf-8")):
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
                             FIRST = False
@@ -117,7 +118,7 @@ class SentenceCorpus(object):
                 token = 0
                 FIRST = True
                 for fchunk in f:
-                    for line in sent_tokenize(fchunk):
+                    for line in sent_tokenize(fchunk.decode("utf-8")):
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
                             FIRST = False
@@ -169,7 +170,7 @@ class SentenceCorpus(object):
                 tokens = 0
                 FIRST = True
                 for fchunk in f:
-                    for line in sent_tokenize(fchunk):
+                    for line in sent_tokenize(fchunk.decode("utf-8")):
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
                             FIRST = False
@@ -183,7 +184,7 @@ class SentenceCorpus(object):
                 token = 0
                 FIRST = True
                 for fchunk in f:
-                    for line in sent_tokenize(fchunk):
+                    for line in sent_tokenize(fchunk.decode("utf-8")):
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
                             FIRST = False

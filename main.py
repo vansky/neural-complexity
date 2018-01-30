@@ -93,12 +93,12 @@ if torch.cuda.is_available():
 
 # Starting from sequential data, batchify arranges the dataset into columns.
 # For instance, with the alphabet as the sequence and batch size 4, we'd get
-# ┌ a g m s ┐
-# │ b h n t │
-# │ c i o u │
-# │ d j p v │
-# │ e k q w │
-# └ f l r x ┘.
+#  a g m s 
+#  b h n t 
+#  c i o u 
+#  d j p v 
+#  e k q w 
+#  f l r x 
 # These columns are treated as independent by the model, which means that the
 # dependence of e. g. 'g' on 'f' can not be learned, but allows more efficient
 # batch processing.
@@ -214,7 +214,9 @@ def get_complexity_apply(o,t,sentid):
                   ##output probabilities ## Currently normalizes probs over N-best list; ideally it'd normalize to probs before getting the N-best
                   outputguesses.append("{:.3f}".format(math.exp(float(nn.functional.log_softmax(guessscores[corpuspos],dim=0)[g]))))
             outputguesses = ' '.join(outputguesses)
-        print(str(word)+' '+str(sentid)+' '+str(corpuspos)+' '+str(len(word))+' '+str(float(surp))+' '+str(float(Hs[corpuspos]))+' '+str(outputguesses))
+            print(str(word)+' '+str(sentid)+' '+str(corpuspos)+' '+str(len(word))+' '+str(float(surp))+' '+str(float(Hs[corpuspos]))+' '+str(outputguesses))
+        else:
+            print(str(word)+' '+str(sentid)+' '+str(corpuspos)+' '+str(len(word))+' '+str(float(surp))+' '+str(float(Hs[corpuspos])))
 
 def apply(func, M):
     ## applies a function along a given dimension
@@ -236,8 +238,8 @@ def repackage_hidden(h):
 # get_batch subdivides the source data into chunks of length args.bptt.
 # If source is equal to the example output of the batchify function, with
 # a bptt-limit of 2, we'd get the following two Variables for i = 0:
-# ┌ a g m s ┐ ┌ b h n t ┐
-# └ b h n t ┘ └ c i o u ┘
+#  a g m s      b h n t 
+#  b h n t      c i o u 
 # Note that despite the name of the function, the subdivison of data is not
 # done along the batch dimension (i.e. dimension 1), since that was handled
 # by the batchify function. The chunks are along dimension 0, corresponding
@@ -269,12 +271,12 @@ def test_evaluate(test_sentences, data_source):
     total_loss = 0
     ntokens = len(corpus.dictionary)
     if args.words:
-        print('word sentid sentpos wlen surp entropy',end='')
+        print('word sentid sentpos wlen surp entropy')#,end='')
         if args.guess:
             for i in range(args.guessn):
-                print(' guess'+str(i),end='')
+                print(' guess'+str(i))#,end='')
                 if args.guessscores:
-                    print(' gscore'+str(i),end='')
+                    print(' gscore'+str(i))#,end='')
         sys.stdout.write('\n')
     for i in range(len(data_source)):
         sent_ids = data_source[i]
@@ -292,7 +294,8 @@ def test_evaluate(test_sentences, data_source):
         data=data.unsqueeze(1) # only needed if there is just a single sentence being processed 
         output, hidden = model(data, hidden)
         output_flat = output.view(-1, ntokens)
-        curr_loss = len(data) * criterion(output_flat, targets).data
+        curr_loss = criterion(output_flat, targets).data
+        #curr_loss = len(data) * criterion(output_flat, targets).data # needed if there is more than a single sentence being processed
         total_loss += curr_loss
         if args.words:
             # output word-level complexity metrics
