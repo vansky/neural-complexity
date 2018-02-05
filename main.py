@@ -1,3 +1,4 @@
+from __future__ import print_function
 import argparse
 import time
 import math
@@ -71,6 +72,8 @@ parser.add_argument('--single', action='store_true',
                     help='use only a single GPU (even if more are available)')
 parser.add_argument('--test', action='store_true',
                     help='test a trained LM')
+parser.add_argument('--words', action='store_true',
+                    help='evaluate word-level complexities (instead of sentence-level loss)')
 parser.add_argument('--guess', action='store_true',
                     help='display best guesses at each time step')
 parser.add_argument('--guessn', type=int, default=1,
@@ -81,8 +84,8 @@ parser.add_argument('--guessratios', action='store_true',
                     help='display guess ratios normalized by best guess')
 parser.add_argument('--guessprobs', action='store_true',
                     help='display guess probs along with guesses')
-parser.add_argument('--words', action='store_true',
-                    help='evaluate word-level complexities (instead of sentence-level loss)')
+parser.add_argument('--complexn', type=int, default=0,
+                    help='compute complexity only over top n guesses (0 = all guesses)')
 args = parser.parse_args()
 
 # Set the random seed manually for reproducibility.
@@ -93,6 +96,9 @@ if torch.cuda.is_available():
     else:
         torch.cuda.manual_seed(args.seed)
 
+if args.complexn > 0:
+    sys.stderr.write('Using beamsize: '+str(args.complexn)+'\n')
+        
 ###############################################################################
 # Load data
 ###############################################################################
@@ -155,13 +161,27 @@ criterion = nn.CrossEntropyLoss()
 
 def get_entropy(o):
     ## o should be a vector scoring possible classes
-    probs = nn.functional.softmax(o,dim=0)
-    logprobs = nn.functional.log_softmax(o,dim=0) #numerically more stable than two separate operations
+    ## returns a scalar entropy over o
+    if args.complexn == 0:
+        beam = o
+    else:
+        # duplicate o but with all losing guesses set to 0
+        beamk,beamix = torch.topk(o,args.complexn,0)
+        beam = Variable(torch.zeros(o.size())).scatter(1,beamix,beamk)
+    probs = nn.functional.softmax(beam,dim=0)
+    logprobs = nn.functional.log_softmax(beam,dim=0) #numerically more stable than two separate operations
     return -1 * torch.sum(probs * logprobs)
 
 def get_surps(o):
     ## o should be a vector scoring possible classes
-    logprobs = nn.functional.log_softmax(o,dim=0)
+    ## returns a vector containing the surprisal of each class in o
+    if args.complexn == 0:
+        beam = o
+    else:
+        # duplicate o but with all losing guesses set to 0
+        beamk,beamix = torch.topk(o,args.complexn,0)
+        beam = Variable(torch.zeros(o.size())).scatter(1,beamix,beamk)
+    logprobs = nn.functional.log_softmax(beam,dim=0)
     return -1 * logprobs
 
 def get_guesses(o,scores=False):
@@ -177,15 +197,7 @@ def get_guesses(o,scores=False):
 def get_guessscores(o):
     return get_guesses(o,True)
 
-def get_complexity_iter(o,t):
-    for corpuspos,targ in enumerate(t):
-        word = corpus.dictionary.idx2word[targ]
-        surp = get_surps(o[corpuspos])
-        H = get_entropy(o[corpuspos])
-        print(str(word)+' '+str(surp)+' '+str(H))
-
-def get_complexity_apply(o,t,sentid):
-    ## Use apply() method
+def get_complexity(o,t,sentid):
     Hs = torch.squeeze(apply(get_entropy,o))
     surps = apply(get_surps,o)
 
@@ -272,19 +284,18 @@ def get_batch(source, i, evaluation=False):
     else:
         return data, target
 
-
 def test_evaluate(test_sentences, data_source):
     # Turn on evaluation mode which disables dropout.
     model.eval()
     total_loss = 0
     ntokens = len(corpus.dictionary)
     if args.words:
-        print('word sentid sentpos wlen surp entropy')#,end='')
+        print('word sentid sentpos wlen surp entropy', end='')
         if args.guess:
             for i in range(args.guessn):
-                print(' guess'+str(i))#,end='')
+                print(' guess'+str(i), end='')
                 if args.guessscores:
-                    print(' gscore'+str(i))#,end='')
+                    print(' gscore'+str(i), end='')
         sys.stdout.write('\n')
     bar = Bar('Processing', max=len(data_source))
     for i in range(len(data_source)):
@@ -306,7 +317,7 @@ def test_evaluate(test_sentences, data_source):
         total_loss += curr_loss
         if args.words:
             # output word-level complexity metrics
-            get_complexity_apply(output_flat,targets,i)
+            get_complexity(output_flat,targets,i)
         else:
             # output sentence-level loss
             print(str(sent)+":"+str(curr_loss[0]))
@@ -404,7 +415,6 @@ else:
     # Load the best saved model.
     with open(args.save, 'rb') as f:
         model = torch.load(f)
-
 
     # Run on test data.
     test_loss = test_evaluate(test_sents, test_data)
