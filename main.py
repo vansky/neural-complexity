@@ -22,8 +22,7 @@ sys.stderr.write('Libraries loaded\n')
 
 parser = argparse.ArgumentParser(description='PyTorch RNN/LSTM Language Model')
 
-parser.add_argument('--data', type=str, default='./data/penn',
-                    help='location of the data corpus')
+## Model parameters
 parser.add_argument('--model', type=str, default='LSTM',
                     help='type of recurrent net (RNN_TANH, RNN_RELU, LSTM, GRU)')
 parser.add_argument('--emsize', type=int, default=200,
@@ -52,32 +51,38 @@ parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
 parser.add_argument('--log-interval', type=int, default=200, metavar='N',
                     help='report interval')
+
+## Data parameters
 parser.add_argument('--save', type=str,  default='model.pt',
                     help='path to save the final model')
-parser.add_argument('--single', action='store_true',
-                    help='use only a single GPU (even if more are available)')
+parser.add_argument('--data', type=str, default='./data/wikitext-2',
+                    help='location of the data corpus')
 parser.add_argument('--lm_data', type=str, default='lm_data.bin',
-                    help='path to save the LM data')
-parser.add_argument('--test', action='store_true',
-                    help='test a trained LM')
-parser.add_argument('--guess', action='store_true',
-                    help='display best guesses at each time step')
-parser.add_argument('--guessscores', action='store_true',
-                    help='display guess scores along with guesses')
-parser.add_argument('--guessratios', action='store_true',
-                    help='display guess ratios normalized by best guess')
-parser.add_argument('--guessprobs', action='store_true',
-                    help='display guess probs along with guesses')
-parser.add_argument('--guessn', type=int, default=1,
-                    help='output top n guesses')
-parser.add_argument('--words', action='store_true',
-                    help='evaluate word-level complexities (instead of sentence-level loss)')
+                    help='path to save the LM data (aka vocab file)')
 parser.add_argument('--trainfname', type=str, default='train.txt',
                     help='name of the training file')
 parser.add_argument('--validfname', type=str, default='valid.txt',
                     help='name of the validation file')
 parser.add_argument('--testfname', type=str, default='test.txt',
                     help='name of the test file')
+
+## Runtime parameters
+parser.add_argument('--single', action='store_true',
+                    help='use only a single GPU (even if more are available)')
+parser.add_argument('--test', action='store_true',
+                    help='test a trained LM')
+parser.add_argument('--guess', action='store_true',
+                    help='display best guesses at each time step')
+parser.add_argument('--guessn', type=int, default=1,
+                    help='output top n guesses')
+parser.add_argument('--guessscores', action='store_true',
+                    help='display guess scores along with guesses')
+parser.add_argument('--guessratios', action='store_true',
+                    help='display guess ratios normalized by best guess')
+parser.add_argument('--guessprobs', action='store_true',
+                    help='display guess probs along with guesses')
+parser.add_argument('--words', action='store_true',
+                    help='evaluate word-level complexities (instead of sentence-level loss)')
 args = parser.parse_args()
 
 # Set the random seed manually for reproducibility.
@@ -94,12 +99,12 @@ if torch.cuda.is_available():
 
 # Starting from sequential data, batchify arranges the dataset into columns.
 # For instance, with the alphabet as the sequence and batch size 4, we'd get
-#  a g m s 
-#  b h n t 
-#  c i o u 
-#  d j p v 
-#  e k q w 
-#  f l r x 
+#  a g m s
+#  b h n t
+#  c i o u
+#  d j p v
+#  e k q w
+#  f l r x
 # These columns are treated as independent by the model, which means that the
 # dependence of e. g. 'g' on 'f' can not be learned, but allows more efficient
 # batch processing.
@@ -115,7 +120,7 @@ def batchify(data, bsz):
     #if args.cuda:
      #    data = data.cuda()
     return data
-    
+
 eval_batch_size = 10
 
 corpus = data.SentenceCorpus(args.data, args.lm_data, args.test,
@@ -183,7 +188,7 @@ def get_complexity_apply(o,t,sentid):
     ## Use apply() method
     Hs = torch.squeeze(apply(get_entropy,o))
     surps = apply(get_surps,o)
-    
+
     if args.guess:
         guesses = apply(get_guesses, o)
         guessscores = apply(get_guessscores, o)
@@ -240,13 +245,13 @@ def repackage_hidden(h):
 # get_batch subdivides the source data into chunks of length args.bptt.
 # If source is equal to the example output of the batchify function, with
 # a bptt-limit of 2, we'd get the following two Variables for i = 0:
-#  a g m s      b h n t 
-#  b h n t      c i o u 
+#  a g m s      b h n t
+#  b h n t      c i o u
 # Note that despite the name of the function, the subdivison of data is not
 # done along the batch dimension (i.e. dimension 1), since that was handled
 # by the batchify function. The chunks are along dimension 0, corresponding
 # to the seq_len dimension in the LSTM.
-    
+
 def test_get_batch(source, evaluation=False):
     seq_len = len(source) - 1
     data = Variable(source[:seq_len], volatile=evaluation)
@@ -256,7 +261,7 @@ def test_get_batch(source, evaluation=False):
         return data.cuda(), target.cuda()
     else:
         return data, target
-    
+
 def get_batch(source, i, evaluation=False):
     seq_len = min(args.bptt, len(source) - 1 - i)
     data = Variable(source[i:i+seq_len], volatile=evaluation)
@@ -293,7 +298,7 @@ def test_evaluate(test_sentences, data_source):
         else:
             hidden = model.init_hidden(1) # number of parallel sentences being processed
         data, targets = test_get_batch(sent_ids, evaluation=True)
-        data=data.unsqueeze(1) # only needed if there is just a single sentence being processed 
+        data=data.unsqueeze(1) # only needed if there is just a single sentence being processed
         output, hidden = model(data, hidden)
         output_flat = output.view(-1, ntokens)
         curr_loss = criterion(output_flat, targets).data

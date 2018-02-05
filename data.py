@@ -238,5 +238,5 @@ class SentenceCorpus(object):
                             else:
                                 ids[token] = self.dictionary.word2idx[word]
                             token += 1
-                        all_ids.append(ids)                
+                        all_ids.append(ids)
         return (sents, all_ids)
