@@ -233,9 +233,9 @@ def get_complexity(o,t,sentid):
                   ##output probabilities ## Currently normalizes probs over N-best list; ideally it'd normalize to probs before getting the N-best
                   outputguesses.append("{:.3f}".format(math.exp(float(nn.functional.log_softmax(guessscores[corpuspos],dim=0)[g]))))
             outputguesses = ' '.join(outputguesses)
-            print(str(word)+' '+str(sentid)+' '+str(corpuspos)+' '+str(len(word))+' '+str(float(surp))+' '+str(float(Hs[corpuspos]))+' '+str(outputguesses))
+            print(str(word)+' '+str(sentid)+' '+str(corpuspos)+' '+str(len(word))+' '+str(float(surp))+' '+str(float(Hs[corpuspos]))+' '+str(max(0,float(Hs[corpuspos])-float(Hs[max(corpuspos-1,0)])))+' '+str(outputguesses))
         else:
-            print(str(word)+' '+str(sentid)+' '+str(corpuspos)+' '+str(len(word))+' '+str(float(surp))+' '+str(float(Hs[corpuspos])))
+            print(str(word)+' '+str(sentid)+' '+str(corpuspos)+' '+str(len(word))+' '+str(float(surp))+' '+str(float(Hs[corpuspos]))+' '+str(max(0,float(Hs[corpuspos])-float(Hs[max(corpuspos-1,0)]))))
 
 def apply(func, M):
     ## applies a function along a given dimension
@@ -290,7 +290,7 @@ def test_evaluate(test_sentences, data_source):
     total_loss = 0
     ntokens = len(corpus.dictionary)
     if args.words:
-        print('word sentid sentpos wlen surp entropy', end='')
+        print('word sentid sentpos wlen surp entropy entred', end='')
         if args.guess:
             for i in range(args.guessn):
                 print(' guess'+str(i), end='')
@@ -419,6 +419,6 @@ else:
     # Run on test data.
     test_loss = test_evaluate(test_sents, test_data)
     print('=' * 89)
-    print('| End of training | test loss {:5.2f} | test ppl {:8.2f}'.format(
+    print('| End of testing | test loss {:5.2f} | test ppl {:8.2f}'.format(
         test_loss, math.exp(test_loss)))
     print('=' * 89)
