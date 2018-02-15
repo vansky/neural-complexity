@@ -71,7 +71,10 @@ class SentenceCorpus(object):
                 tokens = 0
                 FIRST = True
                 for fchunk in f.readlines():
-                    for line in sent_tokenize(fchunk.decode("utf-8")):
+                    for line in sent_tokenize(fchunk):
+                        if line.strip() == '':
+                            #ignore blank lines
+                            continue
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
                             FIRST = False
@@ -87,7 +90,10 @@ class SentenceCorpus(object):
                 token = 0
                 FIRST = True
                 for fchunk in f.readlines():
-                    for line in sent_tokenize(fchunk.decode("utf-8")):
+                    for line in sent_tokenize(fchunk):
+                        if line.strip() == '':
+                            #ignore blank lines
+                            continue
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
                             FIRST = False
@@ -102,7 +108,10 @@ class SentenceCorpus(object):
                 FIRST = True
                 for fchunk in f:
                     #print fchunk
-                    for line in sent_tokenize(fchunk.decode("utf-8")):
+                    for line in sent_tokenize(fchunk):
+                        if line.strip() == '':
+                            #ignore blank lines
+                            continue
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
                             FIRST = False
@@ -118,7 +127,10 @@ class SentenceCorpus(object):
                 token = 0
                 FIRST = True
                 for fchunk in f:
-                    for line in sent_tokenize(fchunk.decode("utf-8")):
+                    for line in sent_tokenize(fchunk):
+                        if line.strip() == '':
+                            #ignore blank lines
+                            continue
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
                             FIRST = False
@@ -138,7 +150,10 @@ class SentenceCorpus(object):
                 tokens = 0
                 FIRST = True
                 for fchunk in f.readlines():
-                    for line in sent_tokenize(fchunk.decode("utf-8")):
+                    for line in sent_tokenize(fchunk):
+                        if line.strip() == '':
+                            #ignore blank lines
+                            continue
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
                             FIRST = False
@@ -152,7 +167,10 @@ class SentenceCorpus(object):
                 token = 0
                 FIRST = True
                 for fchunk in f.readlines():
-                    for line in sent_tokenize(fchunk.decode("utf-8")):
+                    for line in sent_tokenize(fchunk):
+                        if line.strip() == '':
+                            #ignore blank lines
+                            continue
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
                             FIRST = False
@@ -170,7 +188,10 @@ class SentenceCorpus(object):
                 tokens = 0
                 FIRST = True
                 for fchunk in f:
-                    for line in sent_tokenize(fchunk.decode("utf-8")):
+                    for line in sent_tokenize(fchunk):
+                        if line.strip() == '':
+                            #ignore blank lines
+                            continue
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
                             FIRST = False
@@ -184,7 +205,10 @@ class SentenceCorpus(object):
                 token = 0
                 FIRST = True
                 for fchunk in f:
-                    for line in sent_tokenize(fchunk.decode("utf-8")):
+                    for line in sent_tokenize(fchunk):
+                        if line.strip() == '':
+                            #ignore blank lines
+                            continue
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
                             FIRST = False
@@ -206,7 +230,10 @@ class SentenceCorpus(object):
         if path [-2:] == 'gz':
             with gzip.open(path, 'rb') as f:
                 for fchunk in f.readlines():
-                    for line in sent_tokenize(fchunk.decode("utf-8")):
+                    for line in sent_tokenize(fchunk):
+                        if line.strip() == '':
+                            #ignore blank lines
+                            continue
                         sents.append(line.strip())
                         words = ['<eos>'] + line.split() + ['<eos>']
                         tokens = len(words)
@@ -225,6 +252,9 @@ class SentenceCorpus(object):
             with open(path, 'r') as f:
                 for fchunk in f:
                     for line in sent_tokenize(fchunk):
+                        if line.strip() == '':
+                            #ignore blank lines
+                            continue
                         sents.append(line.strip())
                         words = ['<eos>'] + line.split() + ['<eos>']
                         tokens = len(words)
