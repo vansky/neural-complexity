@@ -95,9 +95,6 @@ if torch.cuda.is_available():
         print("WARNING: You have a CUDA device, so you should probably run with --cuda")
     else:
         torch.cuda.manual_seed(args.seed)
-
-if args.complexn > 0:
-    sys.stderr.write('Using beamsize: '+str(args.complexn)+'\n')
         
 ###############################################################################
 # Load data
@@ -167,7 +164,10 @@ def get_entropy(o):
     else:
         # duplicate o but with all losing guesses set to 0
         beamk,beamix = torch.topk(o,args.complexn,0)
-        beam = Variable(torch.zeros(o.size())).scatter(1,beamix,beamk)
+        if args.cuda:
+            beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(0)).scatter(0,beamix,beamk)
+        else:
+            beam = Variable(torch.zeros(o.size())).scatter(0,beamix,beamk)
     probs = nn.functional.softmax(beam,dim=0)
     logprobs = nn.functional.log_softmax(beam,dim=0) #numerically more stable than two separate operations
     return -1 * torch.sum(probs * logprobs)
@@ -180,7 +180,10 @@ def get_surps(o):
     else:
         # duplicate o but with all losing guesses set to 0
         beamk,beamix = torch.topk(o,args.complexn,0)
-        beam = Variable(torch.zeros(o.size())).scatter(1,beamix,beamk)
+        if args.cuda:
+            beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(0)).scatter(0,beamix,beamk)
+        else:
+            beam = Variable(torch.zeros(o.size())).scatter(0,beamix,beamk)
     logprobs = nn.functional.log_softmax(beam,dim=0)
     return -1 * logprobs
 
@@ -289,6 +292,12 @@ def test_evaluate(test_sentences, data_source):
     model.eval()
     total_loss = 0
     ntokens = len(corpus.dictionary)
+    if args.complexn > ntokens or args.complexn <= 0:
+        args.complexn = ntokens
+        sys.stderr.write('Using beamsize: '+str(ntokens)+'\n')
+    else:
+        sys.stderr.write('Using beamsize: '+str(args.complexn)+'\n')
+
     if args.words:
         print('word sentid sentpos wlen surp entropy entred', end='')
         if args.guess:
