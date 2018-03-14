@@ -165,12 +165,16 @@ def get_entropy(o):
         # duplicate o but with all losing guesses set to 0
         beamk,beamix = torch.topk(o,args.complexn,0)
         if args.cuda:
-            beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(0)).scatter(0,beamix,beamk)
+            #beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(0)).scatter(0,beamix,beamk)
+            beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
         else:
-            beam = Variable(torch.zeros(o.size())).scatter(0,beamix,beamk)
+            #beam = Variable(torch.zeros(o.size())).scatter(0,beamix,beamk)
+            beam = Variable(torch.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
     probs = nn.functional.softmax(beam,dim=0)
     logprobs = nn.functional.log_softmax(beam,dim=0) #numerically more stable than two separate operations
-    return -1 * torch.sum(probs * logprobs)
+    prod = probs * logprobs
+    prod[prod != prod] = 0 #set nans to 0
+    return -1 * torch.sum(prod)
 
 def get_surps(o):
     ## o should be a vector scoring possible classes
@@ -181,9 +185,11 @@ def get_surps(o):
         # duplicate o but with all losing guesses set to 0
         beamk,beamix = torch.topk(o,args.complexn,0)
         if args.cuda:
-            beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(0)).scatter(0,beamix,beamk)
+            #beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(0)).scatter(0,beamix,beamk)
+            beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
         else:
-            beam = Variable(torch.zeros(o.size())).scatter(0,beamix,beamk)
+            #beam = Variable(torch.zeros(o.size())).scatter(0,beamix,beamk)
+            beam = Variable(torch.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
     logprobs = nn.functional.log_softmax(beam,dim=0)
     return -1 * logprobs
 
