@@ -86,6 +86,8 @@ parser.add_argument('--guessprobs', action='store_true',
                     help='display guess probs along with guesses')
 parser.add_argument('--complexn', type=int, default=0,
                     help='compute complexity only over top n guesses (0 = all guesses)')
+parser.add_argument('--clippedtopk', action="store_true",
+                    help='completely clip non top-k options to 0 rather than simply lowering them')
 args = parser.parse_args()
 
 # Set the random seed manually for reproducibility.
@@ -165,11 +167,15 @@ def get_entropy(o):
         # duplicate o but with all losing guesses set to 0
         beamk,beamix = torch.topk(o,args.complexn,0)
         if args.cuda:
-            #beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(0)).scatter(0,beamix,beamk)
-            beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
+            if args.clippedtopk:
+                beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
+            else:
+                beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(0)).scatter(0,beamix,beamk)
         else:
-            #beam = Variable(torch.zeros(o.size())).scatter(0,beamix,beamk)
-            beam = Variable(torch.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
+            if args.clippedtopk:
+                beam = Variable(torch.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
+            else:
+                beam = Variable(torch.zeros(o.size())).scatter(0,beamix,beamk)
     probs = nn.functional.softmax(beam,dim=0)
     logprobs = nn.functional.log_softmax(beam,dim=0) #numerically more stable than two separate operations
     prod = probs * logprobs
@@ -185,11 +191,17 @@ def get_surps(o):
         # duplicate o but with all losing guesses set to 0
         beamk,beamix = torch.topk(o,args.complexn,0)
         if args.cuda:
-            #beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(0)).scatter(0,beamix,beamk)
-            beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
+            if args.clippedtopk:
+                beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
+            else:
+                beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(0)).scatter(0,beamix,beamk)
+            
         else:
-            #beam = Variable(torch.zeros(o.size())).scatter(0,beamix,beamk)
-            beam = Variable(torch.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
+            if args.clippedtopk:
+                beam = Variable(torch.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
+            else:
+                beam = Variable(torch.zeros(o.size())).scatter(0,beamix,beamk)
+            
     logprobs = nn.functional.log_softmax(beam,dim=0)
     return -1 * logprobs
 
@@ -305,7 +317,7 @@ def test_evaluate(test_sentences, data_source):
         sys.stderr.write('Using beamsize: '+str(args.complexn)+'\n')
 
     if args.words:
-        print('word sentid sentpos wlen surp entropy entred', end='')
+        print('word sentid sentpos wlen surp{0} entropy{0} entred{0}'.format(args.complexn), end='')
         if args.guess:
             for i in range(args.guessn):
                 print(' guess'+str(i), end='')
@@ -402,6 +414,8 @@ def train():
 # Loop over epochs.
 lr = args.lr
 best_val_loss = None
+prev_val_loss = None
+prev2_val_loss = None
 
 # At any point you can hit Ctrl + C to break out of training early.
 if not args.test:
@@ -422,6 +436,11 @@ if not args.test:
                     best_val_loss = val_loss
             else:
                 # Anneal the learning rate if no improvement has been seen in the validation dataset.
+                if val_loss == prev_val_loss == prev2_val_loss:
+                    print('Covergence achieved! Ending training early')
+                    break
+                prev2_val_loss = prev_val_loss
+                prev_val_loss = val_loss
                 lr /= 4.0
     except KeyboardInterrupt:
         print('-' * 89)

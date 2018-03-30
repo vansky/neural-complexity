@@ -71,7 +71,7 @@ class SentenceCorpus(object):
                 tokens = 0
                 FIRST = True
                 for fchunk in f.readlines():
-                    for line in sent_tokenize(fchunk):
+                    for line in sent_tokenize(fchunk.decode("utf-8")):
                         if line.strip() == '':
                             #ignore blank lines
                             continue
@@ -90,7 +90,7 @@ class SentenceCorpus(object):
                 token = 0
                 FIRST = True
                 for fchunk in f.readlines():
-                    for line in sent_tokenize(fchunk):
+                    for line in sent_tokenize(fchunk.decode("utf-8")):
                         if line.strip() == '':
                             #ignore blank lines
                             continue
@@ -150,7 +150,7 @@ class SentenceCorpus(object):
                 tokens = 0
                 FIRST = True
                 for fchunk in f.readlines():
-                    for line in sent_tokenize(fchunk):
+                    for line in sent_tokenize(fchunk.decode("utf-8")):
                         if line.strip() == '':
                             #ignore blank lines
                             continue
@@ -167,7 +167,7 @@ class SentenceCorpus(object):
                 token = 0
                 FIRST = True
                 for fchunk in f.readlines():
-                    for line in sent_tokenize(fchunk):
+                    for line in sent_tokenize(fchunk.decode("utf-8")):
                         if line.strip() == '':
                             #ignore blank lines
                             continue
@@ -230,7 +230,7 @@ class SentenceCorpus(object):
         if path [-2:] == 'gz':
             with gzip.open(path, 'rb') as f:
                 for fchunk in f.readlines():
-                    for line in sent_tokenize(fchunk):
+                    for line in sent_tokenize(fchunk.decode("utf-8")):
                         if line.strip() == '':
                             #ignore blank lines
                             continue
