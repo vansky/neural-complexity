@@ -5,22 +5,6 @@ import gzip
 
 from nltk import sent_tokenize
 
-class convertvocab(object):
-    def __init__(self, load_from, save_to):
-        self.dictionary = Dictionary()
-        self.loadme = self.load_dict(load_from)
-        self.save_to = self.save_dict(save_to)
-
-    def save_dict(self, path):
-        with open(path, 'wb') as f:
-            torch.save(self.dictionary, f, pickle_module=dill)
-
-    def load_dict(self, path):
-        assert os.path.exists(path)
-        with open(path, 'r') as f:
-            for line in f:
-                self.dictionary.add_word(line.strip())
-
 class Dictionary(object):
     def __init__(self):
         self.word2idx = {}
@@ -46,7 +30,11 @@ class SentenceCorpus(object):
             self.valid = self.tokenize_with_unks(os.path.join(path, validfname))
             self.save_to = self.save_dict(save_to)
         else:
-            self.dictionary = self.load_dict(save_to)
+            if save_to[-3:] == 'bin':
+                self.load_dict(save_to)
+            else:
+                self.dictionary = Dictionary()
+                self.load_dict(save_to)
             self.test = self.sent_tokenize_with_unks(os.path.join(path, testfname))
 
     def save_dict(self, path):
@@ -55,12 +43,20 @@ class SentenceCorpus(object):
 
     def load_dict(self, path):
         assert os.path.exists(path)
-        with open(path, 'rb') as f:
-            fdata = torch.load(f, pickle_module=dill)
-            if type(fdata) == type(()):
-                # compatibility with old pytorch LM saving
-                return(fdata[3])
-            return(fdata)
+        if path[-3:] == 'bin':
+            #this check actually seems to be faster than passing in a binary flag
+            #assume binarized
+            with open(path, 'rb') as f:
+                fdata = torch.load(f, pickle_module=dill)
+                if type(fdata) == type(()):
+                    # compatibility with old pytorch LM saving
+                    self.dictionary = fdata[3]
+                self.dictionary = fdata
+        else:
+            #assume plaintext
+            with open(path, 'r') as f:
+                for line in f:
+                    self.dictionary.add_word(line.strip())
 
     def tokenize(self, path):
         """Tokenizes a text file."""
