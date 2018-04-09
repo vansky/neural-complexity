@@ -97,7 +97,7 @@ if torch.cuda.is_available():
         print("WARNING: You have a CUDA device, so you should probably run with --cuda")
     else:
         torch.cuda.manual_seed(args.seed)
-        
+
 ###############################################################################
 # Load data
 ###############################################################################
@@ -195,13 +195,13 @@ def get_surps(o):
                 beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
             else:
                 beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(0)).scatter(0,beamix,beamk)
-            
+
         else:
             if args.clippedtopk:
                 beam = Variable(torch.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
             else:
                 beam = Variable(torch.zeros(o.size())).scatter(0,beamix,beamk)
-            
+
     logprobs = nn.functional.log_softmax(beam,dim=0)
     return -1 * logprobs
 
@@ -330,7 +330,7 @@ def test_evaluate(test_sentences, data_source):
         sent = test_sentences[i]
         if args.cuda:
             sent_ids = sent_ids.cuda()
-        if (not args.single) and (torch.cuda.device_count() > 1):
+        if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
             # "module" is necessary when using DataParallel
             hidden = model.module.init_hidden(1) # number of parallel sentences being processed
         else:
@@ -358,7 +358,7 @@ def evaluate(data_source):
     model.eval()
     total_loss = 0
     ntokens = len(corpus.dictionary)
-    if (not args.single) and (torch.cuda.device_count() > 1):
+    if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
         #"module" is necessary when using DataParallel
         hidden = model.module.init_hidden(eval_batch_size)
     else:
@@ -379,7 +379,7 @@ def train():
     total_loss = 0
     start_time = time.time()
     ntokens = len(corpus.dictionary)
-    if (not args.single) and (torch.cuda.device_count() > 1):
+    if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
         # "module" is necessary when using DataParallel
         hidden = model.module.init_hidden(args.batch_size)
     else:
@@ -448,7 +448,7 @@ if not args.test:
 else:
     # Load the best saved model.
     with open(args.save, 'rb') as f:
-        model = torch.load(f)
+        model = torch.load(f, map_location=lambda storage, loc: storage)
 
     # Run on test data.
     test_loss = test_evaluate(test_sents, test_data)
