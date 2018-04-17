@@ -10,7 +10,10 @@ import data
 import model
 import sys
 import numpy as np
+import warnings
 #import Decimal #TODO: need to install Decimal
+
+warnings.filterwarnings("ignore") #suppress SourceChangeWarnings
 
 sys.stderr.write('Libraries loaded\n')
 
@@ -74,6 +77,10 @@ parser.add_argument('--test', action='store_true',
                     help='test a trained LM')
 parser.add_argument('--words', action='store_true',
                     help='evaluate word-level complexities (instead of sentence-level loss)')
+parser.add_argument('--interact', action='store_true',
+                    help='run a trained network interactively')
+parser.add_argument('--csep', type=str, default=' ',
+                    help='change the separator in the complexity output')
 parser.add_argument('--guess', action='store_true',
                     help='display best guesses at each time step')
 parser.add_argument('--guessn', type=int, default=1,
@@ -88,7 +95,14 @@ parser.add_argument('--complexn', type=int, default=0,
                     help='compute complexity only over top n guesses (0 = all guesses)')
 parser.add_argument('--clippedtopk', action="store_true",
                     help='completely clip non top-k options to 0 rather than simply lowering them')
+parser.add_argument('--nopp', action='store_true',
+                    help='suppress evaluation perplexity output')
 args = parser.parse_args()
+
+if args.interact:
+    # If in interactive mode, force complexity output
+    args.words = True
+    args.test = True
 
 # Set the random seed manually for reproducibility.
 torch.manual_seed(args.seed)
@@ -128,22 +142,23 @@ def batchify(data, bsz):
 
 eval_batch_size = 10
 
-corpus = data.SentenceCorpus(args.data, args.lm_data, args.test,
+corpus = data.SentenceCorpus(args.data, args.lm_data, args.test, args.interact,
                              trainfname=args.trainfname,
                              validfname=args.validfname,
                              testfname=args.testfname)
 
-if args.test:
-    test_sents, test_data = corpus.test
-else:
-    train_data = batchify(corpus.train, args.batch_size)
-    val_data = batchify(corpus.valid, eval_batch_size)
+if not args.interact:
+    if args.test:
+        test_sents, test_data = corpus.test
+    else:
+        train_data = batchify(corpus.train, args.batch_size)
+        val_data = batchify(corpus.valid, eval_batch_size)
 
 ###############################################################################
 # Build/load the model
 ###############################################################################
 
-if not args.test:
+if not args.test and not args.interact:
     ntokens = len(corpus.dictionary)
     model = model.RNNModel(args.model, ntokens, args.emsize, args.nhid, args.nlayers, args.dropout, args.tied)
     if args.cuda:
@@ -195,7 +210,6 @@ def get_surps(o):
                 beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
             else:
                 beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(0)).scatter(0,beamix,beamk)
-
         else:
             if args.clippedtopk:
                 beam = Variable(torch.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
@@ -253,10 +267,10 @@ def get_complexity(o,t,sentid):
                 elif args.guessprobs:
                   ##output probabilities ## Currently normalizes probs over N-best list; ideally it'd normalize to probs before getting the N-best
                   outputguesses.append("{:.3f}".format(math.exp(float(nn.functional.log_softmax(guessscores[corpuspos],dim=0)[g]))))
-            outputguesses = ' '.join(outputguesses)
-            print(str(word)+' '+str(sentid)+' '+str(corpuspos)+' '+str(len(word))+' '+str(float(surp))+' '+str(float(Hs[corpuspos]))+' '+str(max(0,float(Hs[corpuspos])-float(Hs[max(corpuspos-1,0)])))+' '+str(outputguesses))
+            outputguesses = args.csep.join(outputguesses)
+            print(str(word)+args.csep+str(sentid)+args.csep+str(corpuspos)+args.csep+str(len(word))+args.csep+str(float(surp))+args.csep+str(float(Hs[corpuspos]))+args.csep+str(max(0,float(Hs[corpuspos])-float(Hs[max(corpuspos-1,0)])))+args.csep+str(outputguesses))
         else:
-            print(str(word)+' '+str(sentid)+' '+str(corpuspos)+' '+str(len(word))+' '+str(float(surp))+' '+str(float(Hs[corpuspos]))+' '+str(max(0,float(Hs[corpuspos])-float(Hs[max(corpuspos-1,0)]))))
+            print(str(word)+args.csep+str(sentid)+args.csep+str(corpuspos)+args.csep+str(len(word))+args.csep+str(float(surp))+args.csep+str(float(Hs[corpuspos]))+args.csep+str(max(0,float(Hs[corpuspos])-float(Hs[max(corpuspos-1,0)]))))
 
 def apply(func, M):
     ## applies a function along a given dimension
@@ -317,12 +331,15 @@ def test_evaluate(test_sentences, data_source):
         sys.stderr.write('Using beamsize: '+str(args.complexn)+'\n')
 
     if args.words:
-        print('word sentid sentpos wlen surp{0} entropy{0} entred{0}'.format(args.complexn), end='')
+        if args.complexn == ntokens:
+            print('word{0}sentid{0}sentpos{0}wlen{0}surp{0}entropy{0}entred'.format(args.csep), end='')
+        else:
+            print('word{0}sentid{0}sentpos{0}wlen{0}surp{1}{0}entropy{1}{0}entred{1}'.format(args.csep,args.complexn), end='')
         if args.guess:
             for i in range(args.guessn):
-                print(' guess'+str(i), end='')
+                print('{0}guess'.format(args.csep)+str(i), end='')
                 if args.guessscores:
-                    print(' gscore'+str(i), end='')
+                    print('{0}gscore'.format(args.csep)+str(i), end='')
         sys.stdout.write('\n')
     bar = Bar('Processing', max=len(data_source))
     for i in range(len(data_source)):
@@ -418,7 +435,7 @@ prev_val_loss = None
 prev2_val_loss = None
 
 # At any point you can hit Ctrl + C to break out of training early.
-if not args.test:
+if not args.test and not args.interact:
     try:
         for epoch in range(1, args.epochs+1):
             epoch_start_time = time.time()
@@ -448,11 +465,33 @@ if not args.test:
 else:
     # Load the best saved model.
     with open(args.save, 'rb') as f:
-        model = torch.load(f, map_location=lambda storage, loc: storage)
+        if args.cuda:
+            #Run on GPUs
+            model = torch.load(f)
+        else:
+            #Run on CPUs
+            model = torch.load(f, map_location=lambda storage, loc: storage)
 
     # Run on test data.
-    test_loss = test_evaluate(test_sents, test_data)
-    print('=' * 89)
-    print('| End of testing | test loss {:5.2f} | test ppl {:8.2f}'.format(
-        test_loss, math.exp(test_loss)))
-    print('=' * 89)
+    if args.interact:
+        # First fix Python 2.x input command
+        try: input = raw_input
+        except NameError: pass
+
+        # Then run interactively
+        print('Running in interactive mode. Ctrl+c to exit')
+        try:
+           while True:
+               instr = input('Input a sentence: ')
+               test_sents, test_data = corpus.online_tokenize_with_unks(instr)
+               test_evaluate(test_sents, test_data)
+        except KeyboardInterrupt:
+            print(' ')
+            pass
+    else:
+        test_loss = test_evaluate(test_sents, test_data)
+    if not args.interact and not args.nopp:
+        print('=' * 89)
+        print('| End of testing | test loss {:5.2f} | test ppl {:8.2f}'.format(
+            test_loss, math.exp(test_loss)))
+        print('=' * 89)

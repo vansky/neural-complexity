@@ -269,7 +269,7 @@ class SentenceCorpus(object):
                         all_ids.append(ids)
         return (sents, all_ids)
 
-    def online_tokenize_with_unks(line):
+    def online_tokenize_with_unks(self, line):
         """Tokenizes an input sentence, adding unks if needed."""
         all_ids = []
         sents = [line.strip()]
