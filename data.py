@@ -20,7 +20,7 @@ class Dictionary(object):
         return len(self.idx2word)
 
 class SentenceCorpus(object):
-    def __init__(self, path, save_to, testflag=False,
+    def __init__(self, path, save_to, testflag=False,interactflag=False,
                  trainfname='train.txt',
                  validfname='valid.txt',
                  testfname='test.txt'):
@@ -35,7 +35,9 @@ class SentenceCorpus(object):
             else:
                 self.dictionary = Dictionary()
                 self.load_dict(save_to)
-            self.test = self.sent_tokenize_with_unks(os.path.join(path, testfname))
+            if not interactflag:
+                self.test = self.sent_tokenize_with_unks(os.path.join(path, testfname))
+
 
     def save_dict(self, path):
         with open(path, 'wb') as f:
@@ -217,7 +219,7 @@ class SentenceCorpus(object):
                                 ids[token] = self.dictionary.word2idx[word]
                             token += 1
         return ids
-
+        
     def sent_tokenize_with_unks(self, path):
         """Tokenizes a text file into sentences, adding unks if needed."""
         assert os.path.exists(path)
@@ -265,4 +267,24 @@ class SentenceCorpus(object):
                                 ids[token] = self.dictionary.word2idx[word]
                             token += 1
                         all_ids.append(ids)
+        return (sents, all_ids)
+
+    def online_tokenize_with_unks(self, line):
+        """Tokenizes an input sentence, adding unks if needed."""
+        all_ids = []
+        sents = [line.strip()]
+
+        words = ['<eos>'] + line.strip().split() + ['<eos>']
+        tokens = len(words)
+
+        # tokenize file content
+        ids = torch.LongTensor(tokens)
+        token = 0
+        for word in words:
+            if word not in self.dictionary.word2idx:
+                ids[token] = self.dictionary.add_word("<unk>")
+            else:
+                ids[token] = self.dictionary.word2idx[word]
+            token += 1
+        all_ids.append(ids)
         return (sents, all_ids)
