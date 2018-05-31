@@ -24,9 +24,9 @@ These parameters help specify the model
 ### Data parameters
 These parameters specify the data to use
 
-    --save [PATH]: Path for saving/loading trained model (default: model.pt)  
-    --data [PATH]: Directory of the corpus data (default: data/wikitext-2)
-    --lm_data [PATH]: Path to store the training vocab (default: lm_data.bin)
+    --model_file [PATH]: Path for saving/loading trained model (default: model.pt)  
+    --data_dir [PATH]: Directory of the corpus data (default: data/wikitext-2)  
+    --vocab_file [PATH]: Path to store the training vocab (default: vocab.bin)  
     --trainfname [FILE]: Name of training file within the data directory (default: train.txt)  
     --validfname [FILE]: Name of validation file within the data directory (default: valid.txt)  
     --testfname [FILE]: Name of test file within the data directory (default: test.txt)

@@ -57,12 +57,12 @@ parser.add_argument('--log-interval', type=int, default=200, metavar='N',
                     help='report interval')
 
 ## Data parameters
-parser.add_argument('--save', type=str,  default='model.pt',
+parser.add_argument('--model_file', type=str,  default='model.pt',
                     help='path to save the final model')
-parser.add_argument('--data', type=str, default='./data/wikitext-2',
-                    help='location of the data corpus')
-parser.add_argument('--lm_data', type=str, default='lm_data.bin',
-                    help='path to save the LM data (aka vocab file)')
+parser.add_argument('--data_dir', type=str, default='./data/wikitext-2',
+                    help='location of the corpus data')
+parser.add_argument('--vocab_file', type=str, default='vocab.bin',
+                    help='path to save the vocab file')
 parser.add_argument('--trainfname', type=str, default='train.txt',
                     help='name of the training file')
 parser.add_argument('--validfname', type=str, default='valid.txt',
@@ -142,7 +142,7 @@ def batchify(data, bsz):
 
 eval_batch_size = 10
 
-corpus = data.SentenceCorpus(args.data, args.lm_data, args.test, args.interact,
+corpus = data.SentenceCorpus(args.data_dir, args.vocab_file, args.test, args.interact,
                              trainfname=args.trainfname,
                              validfname=args.validfname,
                              testfname=args.testfname)
@@ -449,7 +449,7 @@ if not args.test and not args.interact:
             print('-' * 89)
             # Save the model if the validation loss is the best we've seen so far.
             if not best_val_loss or val_loss < best_val_loss:
-                with open(args.save, 'wb') as f:
+                with open(args.model_file, 'wb') as f:
                     torch.save(model, f)
                     best_val_loss = val_loss
             else:
@@ -465,7 +465,7 @@ if not args.test and not args.interact:
         print('Exiting from training early')
 else:
     # Load the best saved model.
-    with open(args.save, 'rb') as f:
+    with open(args.model_file, 'rb') as f:
         if args.cuda:
             #Run on GPUs
             model = torch.load(f)
