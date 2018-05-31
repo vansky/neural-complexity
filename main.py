@@ -93,7 +93,7 @@ parser.add_argument('--guessprobs', action='store_true',
                     help='display guess probs along with guesses')
 parser.add_argument('--complexn', type=int, default=0,
                     help='compute complexity only over top n guesses (0 = all guesses)')
-parser.add_argument('--softcliptopk', action="store_false",
+parser.add_argument('--softcliptopk', action="store_true",
                     help='soften non top-k options instead of removing them')
 parser.add_argument('--nopp', action='store_true',
                     help='suppress evaluation perplexity output')
