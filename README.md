@@ -1,7 +1,15 @@
 # Neural complexity
-A neural language model that operates over words (based on the Pytorch word language model example) and has a number of improvements for testing on new data (inferring UNKs, blank line, early convergence detection, and unicode character handling).
+A neural language model that operates over words (based on the Pytorch word language model example) and has a number of improvements for testing on new data.
 
-Outputs incremental information-theoretic complexity estimates (i.e. surprisal, entropy, entropy reduction).
+## Features
+* Outputs incremental word-by-word information-theoretic complexity estimates (i.e. surprisal, entropy, entropy reduction) if the runtime command `--words` is given.
+* Can operate interactively
+* Early convergence detection (when loss is the same for 3 consecutive training epochs)
+* Any words in the test corpus which were not seen during training are converted to `<unk>`. The probability of `<unk>` can be explicitly trained on `<unk>` tokens in the training data and/or implicitly learned using new words seen during validation.
+* Can operate directly on gzipped corpora
+* Does not require training data to be present at test time
+* Can handle blank lines and unicode characters in the input corpora
+* Can handle plaintext vocabularies (interpretable by humans, 1/3 the size, and only a few ms slower to load)
 
 ### Model parameters
 These parameters help specify the model  

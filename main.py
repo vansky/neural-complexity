@@ -53,8 +53,6 @@ parser.add_argument('--seed', type=int, default=1111,
                     help='random seed')
 parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
-parser.add_argument('--log-interval', type=int, default=200, metavar='N',
-                    help='report interval')
 
 ## Data parameters
 parser.add_argument('--model_file', type=str,  default='model.pt',
@@ -252,7 +250,7 @@ def get_complexity(o,t,sentid):
     for corpuspos,targ in enumerate(t):
         word = corpus.dictionary.idx2word[int(targ)]
         if word == '<eos>':
-            #don't output the complexity of EOS
+            ## don't output the complexity of EOS
             continue
         surp = surps[corpuspos][int(targ)]
         if args.guess:
@@ -260,10 +258,10 @@ def get_complexity(o,t,sentid):
             for g in range(args.guessn):
                 outputguesses.append(corpus.dictionary.idx2word[int(guesses[corpuspos][g])])
                 if args.guessscores:
-                    ##output raw scores
+                    ## output raw scores
                     outputguesses.append("{:.3f}".format(float(guessscores[corpuspos][g])))
                 elif args.guessratios:
-                    ##output scores (ratio of score(x)/score(best guess)
+                    ## output scores (ratio of score(x)/score(best guess)
                     outputguesses.append("{:.3f}".format(float(guessscores[corpuspos][g])/float(guessscores[corpuspos][0])))
                 elif args.guessprobs:
                   ##output probabilities ## Currently normalizes probs over N-best list; ideally it'd normalize to probs before getting the N-best
