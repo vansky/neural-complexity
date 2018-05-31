@@ -93,8 +93,8 @@ parser.add_argument('--guessprobs', action='store_true',
                     help='display guess probs along with guesses')
 parser.add_argument('--complexn', type=int, default=0,
                     help='compute complexity only over top n guesses (0 = all guesses)')
-parser.add_argument('--clippedtopk', action="store_true",
-                    help='completely clip non top-k options to 0 rather than simply lowering them')
+parser.add_argument('--softcliptopk', action="store_false",
+                    help='soften non top-k options instead of removing them')
 parser.add_argument('--nopp', action='store_true',
                     help='suppress evaluation perplexity output')
 args = parser.parse_args()
@@ -182,15 +182,16 @@ def get_entropy(o):
         # duplicate o but with all losing guesses set to 0
         beamk,beamix = torch.topk(o,args.complexn,0)
         if args.cuda:
-            if args.clippedtopk:
-                beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
-            else:
+            if args.softcliptopk:
                 beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(0)).scatter(0,beamix,beamk)
-        else:
-            if args.clippedtopk:
-                beam = Variable(torch.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
             else:
+                beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
+        else:
+            if args.softcliptopk:
                 beam = Variable(torch.zeros(o.size())).scatter(0,beamix,beamk)
+            else:
+                beam = Variable(torch.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
+
     probs = nn.functional.softmax(beam,dim=0)
     logprobs = nn.functional.log_softmax(beam,dim=0) #numerically more stable than two separate operations
     prod = probs * logprobs
@@ -206,15 +207,15 @@ def get_surps(o):
         # duplicate o but with all losing guesses set to 0
         beamk,beamix = torch.topk(o,args.complexn,0)
         if args.cuda:
-            if args.clippedtopk:
-                beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
-            else:
+            if args.softcliptopk:
                 beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(0)).scatter(0,beamix,beamk)
-        else:
-            if args.clippedtopk:
-                beam = Variable(torch.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
             else:
+                beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
+        else:
+            if args.softcliptopk:
                 beam = Variable(torch.zeros(o.size())).scatter(0,beamix,beamk)
+            else:
+                beam = Variable(torch.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
 
     logprobs = nn.functional.log_softmax(beam,dim=0)
     return -1 * logprobs
