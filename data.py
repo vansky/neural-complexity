@@ -20,7 +20,7 @@ class Dictionary(object):
         return len(self.idx2word)
 
 class SentenceCorpus(object):
-    def __init__(self, path, save_to, testflag=False,interactflag=False,
+    def __init__(self, path, vocab_file, testflag=False, interactflag=False,
                  trainfname='train.txt',
                  validfname='valid.txt',
                  testfname='test.txt'):
@@ -28,20 +28,27 @@ class SentenceCorpus(object):
             self.dictionary = Dictionary()
             self.train = self.tokenize(os.path.join(path, trainfname))
             self.valid = self.tokenize_with_unks(os.path.join(path, validfname))
-            self.save_to = self.save_dict(save_to)
+            self.vocab_file = self.save_dict(vocab_file)
         else:
-            if save_to[-3:] == 'bin':
-                self.load_dict(save_to)
+            if vocab_file[-3:] == 'bin':
+                self.load_dict(vocab_file)
             else:
                 self.dictionary = Dictionary()
-                self.load_dict(save_to)
+                self.load_dict(vocab_file)
             if not interactflag:
                 self.test = self.sent_tokenize_with_unks(os.path.join(path, testfname))
 
-
     def save_dict(self, path):
-        with open(path, 'wb') as f:
-            torch.save(self.dictionary, f, pickle_module=dill)
+        if vocab_file[-3:] == 'bin':
+            #this check actually seems to be faster than passing in a binary flag
+            #assume binarized
+            with open(path, 'wb') as f:
+                torch.save(self.dictionary, f, pickle_module=dill)
+        else:
+            #assume plaintext
+            with open(path, 'w') as f:
+                for word in self.dictionary.idx2word:
+                    f.write(word+'\n')
 
     def load_dict(self, path):
         assert os.path.exists(path)

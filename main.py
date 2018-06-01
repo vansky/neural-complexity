@@ -59,7 +59,7 @@ parser.add_argument('--model_file', type=str,  default='model.pt',
                     help='path to save the final model')
 parser.add_argument('--data_dir', type=str, default='./data/wikitext-2',
                     help='location of the corpus data')
-parser.add_argument('--vocab_file', type=str, default='vocab.bin',
+parser.add_argument('--vocab_file', type=str, default='vocab.txt',
                     help='path to save the vocab file')
 parser.add_argument('--trainfname', type=str, default='train.txt',
                     help='name of the training file')

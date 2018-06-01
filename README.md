@@ -4,15 +4,15 @@ A neural language model that operates over words (based on the Pytorch word lang
 ### Quick Usage
 To train a Wikitext-2 LSTM model on GPUs:
 
-    time python main.py --model_file 'wiki_2_model.pt' --vocab_file 'wiki_2_vocab.bin' --tied --cuda --data './data/wikitext-2/' --trainfname 'train.txt' --validfname 'valid.txt'
+    time python main.py --model_file 'wiki_2_model.pt' --vocab_file 'wiki_2_vocab.txt' --tied --cuda --data './data/wikitext-2/' --trainfname 'train.txt' --validfname 'valid.txt'
 
 To use that model to obtain incremental complexity estimates for the Wikitext-2 test partition:
 
-    time python main.py --model_file 'wiki_2_model.pt' --vocab_file 'wiki_2_vocab.bin' --cuda --data './data/wikitext-2/' --testfname 'test.txt' --test --words --nopp > FILENAME.OUTPUT
+    time python main.py --model_file 'wiki_2_model.pt' --vocab_file 'wiki_2_vocab.txt' --cuda --data './data/wikitext-2/' --testfname 'test.txt' --test --words --nopp > FILENAME.OUTPUT
 
 To instead use the trained model interactively:
 
-    time python main.py --model_file 'wiki_2_model.pt' --vocab_file 'wiki_2_vocab.bin' --cuda --data './data/wikitext-2/' --interact
+    time python main.py --model_file 'wiki_2_model.pt' --vocab_file 'wiki_2_vocab.txt' --cuda --data './data/wikitext-2/' --interact
 
 ## Features
 * Outputs incremental word-by-word information-theoretic complexity estimates (i.e. surprisal, entropy, entropy reduction) if the runtime command `--words` is given.
@@ -47,7 +47,8 @@ These parameters specify the data to use
 
     --model_file [PATH]: Path for saving/loading trained model (default: model.pt)  
     --data_dir [PATH]: Directory of the corpus data (default: data/wikitext-2)  
-    --vocab_file [PATH]: Path to store the training vocab (default: vocab.bin)  
+    --vocab_file [PATH]: Path to store the training vocab (default: vocab.txt)
+                         If the file has an extension of .bin the vocab will be binarized
     --trainfname [FILE]: Name of training file within the data directory (default: train.txt)  
     --validfname [FILE]: Name of validation file within the data directory (default: valid.txt)  
     --testfname [FILE]: Name of test file within the data directory (default: test.txt)
