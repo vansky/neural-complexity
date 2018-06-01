@@ -3,6 +3,7 @@ A neural language model that operates over words (based on the Pytorch word lang
 
 ### Dependencies
 Requires the following python packages (available through pip):
+* [pytorch](https://pytorch.org/)
 * progress
 * dill
 * nltk
@@ -15,15 +16,15 @@ Requires the `punkt` nltk module. Install it from within python:
 ### Quick Usage
 To train a Wikitext-2 LSTM model on GPUs:
 
-    time python main.py --model_file 'wiki_2_model.pt' --vocab_file 'wiki_2_vocab.txt' --tied --cuda --data './data/wikitext-2/' --trainfname 'train.txt' --validfname 'valid.txt'
+    time python main.py --model_file 'wiki_2_model.pt' --vocab_file 'wiki_2_vocab.txt' --tied --cuda --data_dir './data/wikitext-2/' --trainfname 'train.txt' --validfname 'valid.txt'
 
 To use that model to obtain incremental complexity estimates for the Wikitext-2 test partition:
 
-    time python main.py --model_file 'wiki_2_model.pt' --vocab_file 'wiki_2_vocab.txt' --cuda --data './data/wikitext-2/' --testfname 'test.txt' --test --words --nopp > FILENAME.OUTPUT
+    time python main.py --model_file 'wiki_2_model.pt' --vocab_file 'wiki_2_vocab.txt' --cuda --data_dir './data/wikitext-2/' --testfname 'test.txt' --test --words --nopp > FILENAME.OUTPUT
 
 To instead use the trained model interactively:
 
-    time python main.py --model_file 'wiki_2_model.pt' --vocab_file 'wiki_2_vocab.txt' --cuda --data './data/wikitext-2/' --interact
+    time python main.py --model_file 'wiki_2_model.pt' --vocab_file 'wiki_2_vocab.txt' --cuda --interact
 
 ## Features
 * Outputs incremental word-by-word information-theoretic complexity estimates (i.e. surprisal, entropy, entropy reduction) if the runtime command `--words` is given.
