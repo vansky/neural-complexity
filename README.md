@@ -14,7 +14,9 @@ Requires the `punkt` nltk module. Install it from within python:
     nltk.download('punkt')  
 
 ### Quick Usage
-To train a Wikitext-2 LSTM model on GPUs:
+The below all use GPUs. To use CPUs instead, omit the `--cuda` flag.
+
+To train a Wikitext-2 LSTM model using GPUs:
 
     time python main.py --model_file 'wiki_2_model.pt' --vocab_file 'wiki_2_vocab.txt' --tied --cuda --data_dir './data/wikitext-2/' --trainfname 'train.txt' --validfname 'valid.txt'
 
