@@ -2,11 +2,11 @@
 A neural language model that operates over words (based on the Pytorch word language model example) and has a number of improvements for testing on new data.
 
 ### Quick Usage
-To train a wikitext-2 LSTM model on GPUs:
+To train a Wikitext-2 LSTM model on GPUs:
 
     time python main.py --model_file 'wiki_2_model.pt' --vocab_file 'wiki_2_vocab.bin' --tied --cuda --data './data/wikitext-2/' --trainfname 'train.txt' --validfname 'valid.txt'
 
-To use that model to obtain incremental complexity metrics for some corpus:
+To use that model to obtain incremental complexity estimates for the Wikitext-2 test partition:
 
     time python main.py --model_file 'wiki_2_model.pt' --vocab_file 'wiki_2_vocab.bin' --cuda --data './data/wikitext-2/' --testfname 'test.txt' --test --words --nopp > FILENAME.OUTPUT
 
