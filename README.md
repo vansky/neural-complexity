@@ -1,6 +1,17 @@
 # Neural complexity
 A neural language model that operates over words (based on the Pytorch word language model example) and has a number of improvements for testing on new data.
 
+### Dependencies
+Requires the following python packages (available through pip):
+* progress
+* dill
+* nltk
+
+Requires the `punkt` nltk module. Install it from within python:
+
+    import nltk
+    nltk.download('punkt')  
+
 ### Quick Usage
 To train a Wikitext-2 LSTM model on GPUs:
 
