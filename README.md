@@ -1,6 +1,19 @@
 # Neural complexity
 A neural language model that operates over words (based on the Pytorch word language model example) and has a number of improvements for testing on new data.
 
+### Quick Usage
+To train a wikitext-2 LSTM model on GPUs:
+
+    time python main.py --model_file 'wiki_2_model.pt' --vocab_file 'wiki_2_vocab.bin' --tied --cuda --data './data/wikitext-2/' --trainfname 'train.txt' --validfname 'valid.txt'
+
+To use that model to obtain incremental complexity metrics for some corpus:
+
+    time python main.py --model_file 'wiki_2_model.pt' --vocab_file 'wiki_2_vocab.bin' --cuda --data './data/wikitext-2/' --testfname 'test.txt' --test --words --nopp > FILENAME.OUTPUT
+
+To instead use the trained model interactively:
+
+    time python main.py --model_file 'wiki_2_model.pt' --vocab_file 'wiki_2_vocab.bin' --cuda --data './data/wikitext-2/' --interact
+
 ## Features
 * Outputs incremental word-by-word information-theoretic complexity estimates (i.e. surprisal, entropy, entropy reduction) if the runtime command `--words` is given.
 * Can operate interactively
