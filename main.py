@@ -69,6 +69,8 @@ parser.add_argument('--testfname', type=str, default='test.txt',
                     help='name of the test file')
 
 ## Runtime parameters
+parser.add_argument('--log_interval', type=int, default=200, metavar='N',
+                    help='report interval')
 parser.add_argument('--single', action='store_true',
                     help='use only a single GPU (even if more are available)')
 parser.add_argument('--test', action='store_true',

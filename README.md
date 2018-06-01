@@ -52,7 +52,7 @@ These parameters help specify the model
     --dropout [FLOAT]: Proportion of the network to drop out during training (default: 0.2)  
     --tied: If present, ties word embedding weights to output weights (default: absent)  
     --seed [INT]: Random seed (default: 1111)  
-    --cuda: If present, uses GPUs/CUDA (default: absent)  
+    --cuda: If present, uses GPUs/CUDA (default: absent)
     
 ### Data parameters
 These parameters specify the data to use
@@ -68,6 +68,7 @@ These parameters specify the data to use
 ### Runtime parameters
 These parameters specify runtime options for using the model
 
+    --log_interval [INT]: Number of batches between log outputs (default: 200)  
     --single: If present with --cuda, use only a single GPU even if more are present (default: absent)  
     --test: If present, operate on test data; otherwise, train the model (default: absent)  
     --interact: If present, load the model for interactive use (default: absent)  
