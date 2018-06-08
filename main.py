@@ -269,9 +269,9 @@ def get_complexity(o,t,sentid):
                   ##output probabilities ## Currently normalizes probs over N-best list; ideally it'd normalize to probs before getting the N-best
                   outputguesses.append("{:.3f}".format(math.exp(float(nn.functional.log_softmax(guessscores[corpuspos],dim=0)[g]))))
             outputguesses = args.csep.join(outputguesses)
-            print(str(word)+args.csep+str(sentid)+args.csep+str(corpuspos)+args.csep+str(len(word))+args.csep+str(float(surp))+args.csep+str(float(Hs[corpuspos]))+args.csep+str(max(0,float(Hs[max(corpuspos-1,0)])-float(Hs[corpuspos])))+args.csep+str(outputguesses))
+            print(args.csep.join([str(word),str(sentid),str(corpuspos),str(len(word)),str(float(surp)),str(float(Hs[corpuspos])),str(max(0,float(Hs[max(corpuspos-1,0)])-float(Hs[corpuspos]))),str(outputguesses)]))
         else:
-            print(str(word)+args.csep+str(sentid)+args.csep+str(corpuspos)+args.csep+str(len(word))+args.csep+str(float(surp))+args.csep+str(float(Hs[corpuspos]))+args.csep+str(max(0,float(Hs[max(corpuspos-1,0)])-float(Hs[corpuspos]))))
+            print(args.csep.join([str(word),str(sentid),str(corpuspos),str(len(word)),str(float(surp)),str(float(Hs[corpuspos])),str(max(0,float(Hs[max(corpuspos-1,0)])-float(Hs[corpuspos])))]))
 
 def apply(func, M):
     ## applies a function along a given dimension
@@ -341,6 +341,10 @@ def test_evaluate(test_sentences, data_source):
                 print('{0}guess'.format(args.csep)+str(i), end='')
                 if args.guessscores:
                     print('{0}gscore'.format(args.csep)+str(i), end='')
+                elif args.guessprobs:
+                    print('{0}gprob'.format(args.csep)+str(i), end='')
+                elif args.guessratios:
+                    print('{0}gratio'.format(args.csep)+str(i), end='')
         sys.stdout.write('\n')
     bar = Bar('Processing', max=len(data_source))
     for i in range(len(data_source)):
