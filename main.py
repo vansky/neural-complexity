@@ -59,6 +59,8 @@ parser.add_argument('--cache', action='store_true',
 ## Data parameters
 parser.add_argument('--model_file', type=str,  default='model.pt',
                     help='path to save the final model')
+parser.add_argument('--cache_model_file', type=str,  default='cache_model.pt',
+                    help='path to save the tuned cache model')
 parser.add_argument('--data_dir', type=str, default='./data/wikitext-2',
                     help='location of the corpus data')
 parser.add_argument('--vocab_file', type=str, default='vocab.txt',
@@ -99,6 +101,8 @@ parser.add_argument('--softcliptopk', action="store_true",
                     help='soften non top-k options instead of removing them')
 parser.add_argument('--nopp', action='store_true',
                     help='suppress evaluation perplexity output')
+parser.add_argument('--empty_cache', action='store_true',
+                    help='reset cache but retain hyperparameter settings')
 args = parser.parse_args()
 
 if args.interact:
@@ -442,33 +446,62 @@ prev_val_loss = None
 prev2_val_loss = None
 
 # At any point you can hit Ctrl + C to break out of training early.
-if not args.test and not args.interact:
-    try:
-        for epoch in range(1, args.epochs+1):
-            epoch_start_time = time.time()
-            train()
-            val_loss = evaluate(val_data)
+if not args.test:
+    if not args.cache:
+        ## Train model
+        try:
+            for epoch in range(1, args.epochs+1):
+                epoch_start_time = time.time()
+                train()
+                val_loss = evaluate(val_data)
+                print('-' * 89)
+                print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
+                      'valid ppl {:8.2f}'.format(epoch, (time.time() - epoch_start_time),
+                                                 val_loss, math.exp(val_loss)))
+                print('-' * 89)
+                # Save the model if the validation loss is the best we've seen so far.
+                if not best_val_loss or val_loss < best_val_loss:
+                    with open(args.model_file, 'wb') as f:
+                        torch.save(model, f)
+                        best_val_loss = val_loss
+                else:
+                    # Anneal the learning rate if no improvement has been seen in the validation dataset.
+                    if val_loss == prev_val_loss == prev2_val_loss:
+                        print('Covergence achieved! Ending training early')
+                        break
+                    prev2_val_loss = prev_val_loss
+                    prev_val_loss = val_loss
+                    lr /= 4.0
+        except KeyboardInterrupt:
             print('-' * 89)
-            print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
-                  'valid ppl {:8.2f}'.format(epoch, (time.time() - epoch_start_time),
-                                             val_loss, math.exp(val_loss)))
-            print('-' * 89)
-            # Save the model if the validation loss is the best we've seen so far.
-            if not best_val_loss or val_loss < best_val_loss:
-                with open(args.model_file, 'wb') as f:
-                    torch.save(model, f)
-                    best_val_loss = val_loss
+            print('Exiting from training early')
+    else:
+        # Load the best saved model.
+        with open(args.model_file, 'rb') as f:
+            if args.cuda:
+                #Run on GPUs
+                model = torch.load(f)
             else:
-                # Anneal the learning rate if no improvement has been seen in the validation dataset.
-                if val_loss == prev_val_loss == prev2_val_loss:
-                    print('Covergence achieved! Ending training early')
-                    break
-                prev2_val_loss = prev_val_loss
-                prev_val_loss = val_loss
-                lr /= 4.0
-    except KeyboardInterrupt:
-        print('-' * 89)
-        print('Exiting from training early')
+                #Run on CPUs
+                model = torch.load(f, map_location=lambda storage, loc: storage)
+
+        ## Tune cache hyperparameters
+        for l in range(0.05,0.55,0.1):
+            for theta in range(0.1,1.1,0.1):
+                model.init_cache(cache_size=2000)
+                model.cache_theta = theta
+                model.cache_lambda = l
+                val_loss = evaluate(val_data)
+                print('-' * 89)
+                print('| end of lambda {:3.2f} | end of theta {:3.2f} | time: {:5.2f}s | valid loss {:5.2f} | '
+                      'valid ppl {:8.2f}'.format(l, theta, (time.time() - epoch_start_time),
+                                                 val_loss, math.exp(val_loss)))
+                print('-' * 89)
+                # Save the model if the validation loss is the best we've seen so far.
+                if not best_val_loss or val_loss < best_val_loss:
+                    with open(args.cache_model_file, 'wb') as f:
+                        torch.save(model, f)
+                        best_val_loss = val_loss
 else:
     # Load the best saved model.
     with open(args.model_file, 'rb') as f:
@@ -478,6 +511,14 @@ else:
         else:
             #Run on CPUs
             model = torch.load(f, map_location=lambda storage, loc: storage)
+    if args.cache and not model.use_cache:
+        ## Use an untuned cache
+        model.init_cache()
+        with open(args.cache_model_file, 'wb') as f:
+            torch.save(model, f)
+
+    if args.cache and args.empty_cache:
+        model.reset_cache()
 
     # Run on test data.
     if args.interact:
