@@ -4,7 +4,7 @@ from torch.autograd import Variable
 class RNNModel(nn.Module):
     """Container module with an encoder, a recurrent module, and a decoder."""
 
-    def __init__(self, rnn_type, ntoken, ninp, nhid, nlayers, dropout=0.5, tie_weights=False, use_cache=False, cache_size=2000):
+    def __init__(self, rnn_type, ntoken, ninp, nhid, nlayers, dropout=0.5, tie_weights=False):
         super(RNNModel, self).__init__()
         self.drop = nn.Dropout(dropout)
         self.encoder = nn.Embedding(ntoken, ninp)
@@ -35,9 +35,27 @@ class RNNModel(nn.Module):
         self.rnn_type = rnn_type
         self.nhid = nhid
         self.nlayers = nlayers
-        if use_cache:
-            self.cache_size = cache_size
-            self.init_cache()
+        self.use_cache = False
+
+    def init_weights(self):
+        initrange = 0.1
+        self.encoder.weight.data.uniform_(-initrange, initrange)
+        self.decoder.bias.data.fill_(0)
+        self.decoder.weight.data.uniform_(-initrange, initrange)
+
+    def init_cache(self,cache_size=2000):
+        self.use_cache = True
+        self.cache_size = cache_size
+        self.cache_theta = 0.3
+        self.cache_lambda = 0.1
+        self.cache_pointer = 0
+        self.hidden_cache = torch.Tensor(self.nhid,self.cache_size)
+        self.input_cache = torch.Tensor(self.ntoken,self.cache_size)
+
+    def reset_cache(self):
+        self.cache_pointer = 0
+        self.hidden_cache = torch.Tensor(self.nhid,self.cache_size)
+        self.input_cache = torch.Tensor(self.ntoken,self.cache_size)
 
     def roll(tensor, shift, axis):
         if shift == 0:
@@ -55,19 +73,6 @@ class RNNModel(nn.Module):
         before = tensor.narrow(axis, 0, dim_size - shift)
         after = tensor.narrow(axis, after_start, shift)
         return torch.cat([after, before], axis)
-
-    def init_weights(self):
-        initrange = 0.1
-        self.encoder.weight.data.uniform_(-initrange, initrange)
-        self.decoder.bias.data.fill_(0)
-        self.decoder.weight.data.uniform_(-initrange, initrange)
-
-    def init_cache(self):
-        self.cache_theta = 0.3
-        self.cache_lambda = 0.1
-        self.cache_pointer = 0
-        self.hidden_cache = torch.Tensor(self.nhid,self.cache_size)
-        self.input_cache = torch.Tensor(self.ntoken,self.cache_size)
 
     def forward(self, input, hidden):
         emb = self.drop(self.encoder(input))
