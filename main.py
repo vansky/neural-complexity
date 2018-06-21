@@ -54,7 +54,7 @@ parser.add_argument('--seed', type=int, default=1111,
 parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
 parser.add_argument('--cache', action='store_true',
-                    help='use Grave et al., (2016) continuous neural cache')
+                    help='add Grave et al., (2016) neural cache to pre-trained model (training again will tune cache on dev)')
 
 ## Data parameters
 parser.add_argument('--model_file', type=str,  default='model.pt',
