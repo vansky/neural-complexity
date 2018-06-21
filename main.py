@@ -55,6 +55,8 @@ parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
 parser.add_argument('--cache', action='store_true',
                     help='add Grave et al., (2016) neural cache to pre-trained model (training again will tune cache on dev)')
+parser.add_argument('--cache_size', type=int, default=2000,
+                    help='size of neural cache')
 
 ## Data parameters
 parser.add_argument('--model_file', type=str,  default='model.pt',
@@ -103,6 +105,8 @@ parser.add_argument('--nopp', action='store_true',
                     help='suppress evaluation perplexity output')
 parser.add_argument('--empty_cache', action='store_true',
                     help='reset cache but retain hyperparameter settings')
+parser.add_argument('--cache_hidden_type', type=str, default='flat',
+                    help='type of hidden layer used for cache {"top","bottom","flat"}')
 args = parser.parse_args()
 
 if args.interact:
@@ -485,10 +489,12 @@ if not args.test:
                 #Run on CPUs
                 model = torch.load(f, map_location=lambda storage, loc: storage)
 
+        model.init_cache(cache_size=args.cache_size)
+        model.cache_hidden_type = args.cache_hidden_type
         ## Tune cache hyperparameters
         for l in range(0.05,0.55,0.1):
             for theta in range(0.1,1.1,0.1):
-                model.init_cache(cache_size=2000)
+                model.reset_cache()
                 model.cache_theta = theta
                 model.cache_lambda = l
                 val_loss = evaluate(val_data)

@@ -51,6 +51,7 @@ class RNNModel(nn.Module):
         self.cache_pointer = 0
         self.hidden_cache = torch.Tensor(self.nhid,self.cache_size)
         self.input_cache = torch.Tensor(self.ntoken,self.cache_size)
+        self.cache_hidden_type = "flat" ##{"top","bottom", "flat"}
 
     def reset_cache(self):
         self.cache_pointer = 0
@@ -83,7 +84,15 @@ class RNNModel(nn.Module):
                 self.hidden_cache = roll(self.hidden_cache,1,-1)
                 self.input_cache = roll(self.input_cache,1,-1)
             ## Extend the cache to current time step
-            self.hidden_cache[self.cache_pointer] = hidden[-1,1,:].clone()
+            if self.cache_hidden_type == 'top':
+                self.hidden_cache[self.cache_pointer] = hidden[-1,1,:].clone()
+                current_hidden = hidden[-1,1,:]
+            elif self.cache_hidden_type == 'bottom':
+                self.hidden_cache[self.cache_pointer] = hidden[0,1,:].clone()
+                current_hidden = hidden[0,1,:]
+            elif self.cache_hidden_type == 'flat':
+                self.hidden_cache[self.cache_pointer] = hidden.view(1,-1).clone()
+                current_hidden = hidden.view(1,-1)
             self.input_cache[self.cache_pointer] = input.clone()
 
             if self.cache_pointer > 0:
@@ -91,7 +100,7 @@ class RNNModel(nn.Module):
                 cache_query = torch.zeros(self.ntoken)
                 for i in range(self.cache_pointer):
                     cache_query += self.input_cache[i + 1] * torch.exp(self.cache_theta * \
-                                                             torch.dot(hidden[-1,1,:],self.hidden_cache[i]))
+                                                             torch.dot(current_hidden,self.hidden_cache[i]))
                 output = (1 - self.cache_lambda) * output + self.cache_lambda * cache_query
             if self.cache_pointer != self.cache_size - 1:
                 self.cache_pointer += 1
