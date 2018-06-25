@@ -1,6 +1,5 @@
 import os
 import torch
-import dill
 import gzip
 
 from nltk import sent_tokenize
@@ -42,6 +41,7 @@ class SentenceCorpus(object):
         if path[-3:] == 'bin':
             #this check actually seems to be faster than passing in a binary flag
             #assume binarized
+            import dill
             with open(path, 'wb') as f:
                 torch.save(self.dictionary, f, pickle_module=dill)
         else:
@@ -55,6 +55,7 @@ class SentenceCorpus(object):
         if path[-3:] == 'bin':
             #this check actually seems to be faster than passing in a binary flag
             #assume binarized
+            import dill
             with open(path, 'rb') as f:
                 fdata = torch.load(f, pickle_module=dill)
                 if type(fdata) == type(()):
