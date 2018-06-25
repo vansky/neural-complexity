@@ -4,9 +4,11 @@ A neural language model that operates over words (based on the Pytorch word lang
 ### Dependencies
 Requires the following python packages (available through pip):
 * [pytorch](https://pytorch.org/)
-* progress
-* dill
 * nltk
+
+The following python packages are optional:
+* progress
+* dill (to handle binarized vocabularies)
 
 Requires the `punkt` nltk module. Install it from within python:
 
