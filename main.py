@@ -5,13 +5,17 @@ import math
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
-from progress.bar import Bar
 import data
 import model
 import sys
 import numpy as np
 import warnings
-#import Decimal #TODO: need to install Decimal
+
+try:
+    from progress.bar import Bar
+    PROGRESS = True
+except:
+    PROGRESS = False
 
 warnings.filterwarnings("ignore") #suppress SourceChangeWarnings
 
@@ -346,7 +350,8 @@ def test_evaluate(test_sentences, data_source):
                 elif args.guessratios:
                     print('{0}gratio'.format(args.csep)+str(i), end='')
         sys.stdout.write('\n')
-    bar = Bar('Processing', max=len(data_source))
+    if PROGRESS:
+        bar = Bar('Processing', max=len(data_source))
     for i in range(len(data_source)):
         sent_ids = data_source[i]
         sent = test_sentences[i]
@@ -371,8 +376,10 @@ def test_evaluate(test_sentences, data_source):
             # output sentence-level loss
             print(str(sent)+":"+str(curr_loss[0]))
         hidden = repackage_hidden(hidden)
-        bar.next()
-    bar.finish()
+        if PROGRESS:
+            bar.next()
+    if PROGRESS:
+        bar.finish()
     return total_loss[0] / len(data_source)
 
 def evaluate(data_source):
