@@ -78,7 +78,7 @@ class RNNModel(nn.Module):
     def forward(self, input, hidden):
         emb = self.drop(self.encoder(input))
         output, hidden = self.rnn(emb, hidden)
-        if use_cache:
+        if self.use_cache:
             if self.cache_pointer == self.cache_size - 1:
                 ## Roll the cache
                 self.hidden_cache = roll(self.hidden_cache,1,-1)
