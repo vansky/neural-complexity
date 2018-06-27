@@ -1,5 +1,6 @@
 import torch.nn as nn
 from torch.autograd import Variable
+import torch
 
 class RNNModel(nn.Module):
     """Container module with an encoder, a recurrent module, and a decoder."""
@@ -43,20 +44,20 @@ class RNNModel(nn.Module):
         self.decoder.bias.data.fill_(0)
         self.decoder.weight.data.uniform_(-initrange, initrange)
 
-    def init_cache(self,cache_size=2000):
+    def init_cache(self,cache_size=2000,cache_theta=0.3,cache_lambda=0.1,batch_size=10):
         self.use_cache = True
         self.cache_size = cache_size
-        self.cache_theta = 0.3
-        self.cache_lambda = 0.1
+        self.cache_theta = cache_theta
+        self.cache_lambda = cache_lambda
         self.cache_pointer = 0
-        self.hidden_cache = torch.Tensor(self.nhid,self.cache_size)
-        self.input_cache = torch.Tensor(self.ntoken,self.cache_size)
+        self.hidden_cache = torch.Tensor(self.cache_size,batch_size,self.nhid)
+        self.input_cache = torch.Tensor(self.cache_size,batch_size,self.encoder.num_embeddings)
         self.cache_hidden_type = "flat" ##{"top","bottom", "flat"}
 
-    def reset_cache(self):
+    def reset_cache(self,batch_size=1):
         self.cache_pointer = 0
-        self.hidden_cache = torch.Tensor(self.nhid,self.cache_size)
-        self.input_cache = torch.Tensor(self.ntoken,self.cache_size)
+        self.hidden_cache = torch.Tensor(self.cache_size,batch_size,self.nhid)
+        self.input_cache = torch.Tensor(self.cache_size,batch_size,self.encoder.num_embeddings)
 
     def roll(tensor, shift, axis):
         if shift == 0:
@@ -77,33 +78,42 @@ class RNNModel(nn.Module):
 
     def forward(self, input, hidden):
         emb = self.drop(self.encoder(input))
+        ## input.shape is (seqlen,batchsize,nhid)
         output, hidden = self.rnn(emb, hidden)
+        print(input.shape)
+        print(emb.shape)
+        print(output.shape)
+        print(hidden[0].shape)
+        raise
         if self.use_cache:
+            ## Cache shape is (batch_size,cache_cells)
+            ##   if cache_hidden_type == 'flat': cache_cells = nhid * nlayers
+            ##   else: cache_cells = nhid
             if self.cache_pointer == self.cache_size - 1:
                 ## Roll the cache
-                self.hidden_cache = roll(self.hidden_cache,1,-1)
-                self.input_cache = roll(self.input_cache,1,-1)
+                self.hidden_cache = roll(self.hidden_cache,0,-1)
+                self.input_cache = roll(self.input_cache,0,-1)
             ## Extend the cache to current time step
             if self.cache_hidden_type == 'top':
-                self.hidden_cache[self.cache_pointer] = hidden[-1,1,:].clone()
+                self.hidden_cache[self.cache_pointer] = hidden[0][-1,:,:].clone()
                 current_hidden = hidden[-1,1,:]
             elif self.cache_hidden_type == 'bottom':
-                self.hidden_cache[self.cache_pointer] = hidden[0,1,:].clone()
+                self.hidden_cache[self.cache_pointer] = hidden[0][0,:,:].clone()
                 current_hidden = hidden[0,1,:]
             elif self.cache_hidden_type == 'flat':
-                self.hidden_cache[self.cache_pointer] = hidden.view(1,-1).clone()
+                self.hidden_cache[self.cache_pointer] = hidden[0].view(hidden[0].shape[1],-1).clone()
                 current_hidden = hidden.view(1,-1)
             self.input_cache[self.cache_pointer] = input.clone()
 
             if self.cache_pointer > 0:
                 ## Use the cached states
-                cache_query = torch.zeros(self.ntoken)
+                cache_query = torch.zeros(self.encoder.num_embeddings)
                 for i in range(self.cache_pointer):
                     cache_query += self.input_cache[i + 1] * torch.exp(self.cache_theta * \
                                                              torch.dot(current_hidden,self.hidden_cache[i]))
                 output = (1 - self.cache_lambda) * output + self.cache_lambda * cache_query
             if self.cache_pointer != self.cache_size - 1:
-                self.cache_pointer += 1
+                self.cache_pointer = min(self.cache_size - 1,self.cache_pointer + input.shape[0])
 
         output = self.drop(output)
         decoded = self.decoder(output.view(output.size(0)*output.size(1), output.size(2)))

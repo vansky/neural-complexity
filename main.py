@@ -59,8 +59,6 @@ parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
 parser.add_argument('--cache', action='store_true',
                     help='add Grave et al., (2016) neural cache to pre-trained model (training again will tune cache on dev)')
-parser.add_argument('--cache_size', type=int, default=2000,
-                    help='size of neural cache')
 
 ## Data parameters
 parser.add_argument('--model_file', type=str,  default='model.pt',
@@ -107,10 +105,20 @@ parser.add_argument('--softcliptopk', action="store_true",
                     help='soften non top-k options instead of removing them')
 parser.add_argument('--nopp', action='store_true',
                     help='suppress evaluation perplexity output')
-parser.add_argument('--empty_cache', action='store_true',
+
+parser.add_argument('--reset_cache', action='store_true',
                     help='reset cache but retain hyperparameter settings')
+parser.add_argument('--manual_cache_tuning', action='store_true',
+                    help='force manual cache tuning from runtime parameters even if cache was previously tuned')
 parser.add_argument('--cache_hidden_type', type=str, default='flat',
                     help='type of hidden layer used for cache {"top","bottom","flat"}')
+parser.add_argument('--cache_size', type=int, default=2000,
+                    help='size of neural cache (in time steps)')
+parser.add_argument('--cache_lambda', type=float, default=0.1,
+                    help='weight of cache vs training (0.0 = all training; 1.0 = all cache) ')
+parser.add_argument('--cache_theta', type=float, default=0.3,
+                    help='multiplied by current:cache similarity in cache score (0.0 = no cache similarity) ')
+
 args = parser.parse_args()
 
 if args.interact:
@@ -496,12 +504,12 @@ if not args.test:
                 #Run on CPUs
                 model = torch.load(f, map_location=lambda storage, loc: storage)
 
-        model.init_cache(cache_size=args.cache_size)
+        model.init_cache(cache_size=args.cache_size,batch_size=eval_batch_size)
         model.cache_hidden_type = args.cache_hidden_type
         ## Tune cache hyperparameters
-        for l in range(0.05,0.55,0.1):
-            for theta in range(0.1,1.1,0.1):
-                model.reset_cache()
+        for l in np.arange(0.05,0.55,0.1):
+            for theta in np.arange(0.1,1.1,0.1):
+                model.reset_cache(batch_size=eval_batch_size)
                 model.cache_theta = theta
                 model.cache_lambda = l
                 val_loss = evaluate(val_data)
@@ -524,14 +532,25 @@ else:
         else:
             #Run on CPUs
             model = torch.load(f, map_location=lambda storage, loc: storage)
-    if args.cache and not model.use_cache:
-        ## Use an untuned cache
-        model.init_cache()
+    if args.cache and (not model.use_cache or args.manual_cache_tuning):
+        ## Use an default tuned or manually tuned cache
+        ## To tune the cache, use --cache on a pretrained model without --test
+        model.init_cache(cache_size=args.cache_size,batch_size=1,cache_theta=args.cache_theta,cache_lambda=args.cache_lambda)
         with open(args.cache_model_file, 'wb') as f:
             torch.save(model, f)
 
-    if args.cache and args.empty_cache:
-        model.reset_cache()
+    if args.cache:
+        if args.reset_cache:
+            model.reset_cache(batch_size=1)
+        elif model.hidden_cache.shape[-1] != 1:
+            print('Warning: Testing must be done with a batch_size of 1.\n\
+                   Forcing a cache_reset/reshape to achieve a batch_size of 1.\n\
+                   In future, either use the --reset_cache option during testing\n\
+                   or use the "--batch_size 1" option during training.')
+            model.reset_cache(batch_size=1)
+        else:
+            print('Warning: The cache was not reset after training,\n\
+                   so the initial test cache is now filled with the end of the training data.')
 
     # Run on test data.
     if args.interact:
