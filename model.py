@@ -124,7 +124,7 @@ class RNNModel(nn.Module):
                 output[seqix,:,:] = output_t.clone()
 
                 if self.cache_pointer != self.cache_size - 1:
-                    self.cache_pointer = min(self.cache_size - 1,self.cache_pointer + input.shape[0])
+                    self.cache_pointer += 1
     
             output = self.drop(output)
             decoded = self.decoder(output.view(output.size(0)*output.size(1), output.size(2)))
