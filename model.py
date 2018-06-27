@@ -77,47 +77,58 @@ class RNNModel(nn.Module):
         return torch.cat([after, before], axis)
 
     def forward(self, input, hidden):
-        emb = self.drop(self.encoder(input))
-        ## input.shape is (seqlen,batchsize,nhid)
-        output, hidden = self.rnn(emb, hidden)
-        print(input.shape)
-        print(emb.shape)
-        print(output.shape)
-        print(hidden[0].shape)
-        raise
-        if self.use_cache:
-            ## Cache shape is (batch_size,cache_cells)
-            ##   if cache_hidden_type == 'flat': cache_cells = nhid * nlayers
-            ##   else: cache_cells = nhid
-            if self.cache_pointer == self.cache_size - 1:
-                ## Roll the cache
-                self.hidden_cache = roll(self.hidden_cache,0,-1)
-                self.input_cache = roll(self.input_cache,0,-1)
-            ## Extend the cache to current time step
-            if self.cache_hidden_type == 'top':
-                self.hidden_cache[self.cache_pointer] = hidden[0][-1,:,:].clone()
-                current_hidden = hidden[-1,1,:]
-            elif self.cache_hidden_type == 'bottom':
-                self.hidden_cache[self.cache_pointer] = hidden[0][0,:,:].clone()
-                current_hidden = hidden[0,1,:]
-            elif self.cache_hidden_type == 'flat':
-                self.hidden_cache[self.cache_pointer] = hidden[0].view(hidden[0].shape[1],-1).clone()
-                current_hidden = hidden.view(1,-1)
-            self.input_cache[self.cache_pointer] = input.clone()
+        if not self.use_cache:
+            emb = self.drop(self.encoder(input))
+            output, hidden = self.rnn(emb, hidden)
+            output = self.drop(output)
+            decoded = self.decoder(output.view(output.size(0)*output.size(1), output.size(2)))
+            return decoded.view(output.size(0), output.size(1), decoded.size(1)), hidden
+        else:
+            ## We're using the cache, so we need intermediate hidden states
+            ## Therefore, we need to iterate over the time dimension
+            output = torch.zeros(input.shape[0],input.shape[1],self.nhid)
+            for seqix in range(input.shape[0]):
+                ## step through the input
+                emb_t = self.drop(self.encoder(input[seqix].unsqueeze(0)))
+                output_t, hidden = self.rnn(emb_t, hidden)
 
-            if self.cache_pointer > 0:
-                ## Use the cached states
-                cache_query = torch.zeros(self.encoder.num_embeddings)
-                for i in range(self.cache_pointer):
-                    cache_query += self.input_cache[i + 1] * torch.exp(self.cache_theta * \
-                                                             torch.dot(current_hidden,self.hidden_cache[i]))
-                output = (1 - self.cache_lambda) * output + self.cache_lambda * cache_query
-            if self.cache_pointer != self.cache_size - 1:
-                self.cache_pointer = min(self.cache_size - 1,self.cache_pointer + input.shape[0])
+                ## Cache shape is (batch_size,cache_cells)
+                ##   if cache_hidden_type == 'flat': cache_cells = nhid * nlayers
+                ##   else: cache_cells = nhid
+                
+                ## perform cache operations
+                if self.cache_pointer == self.cache_size - 1:
+                    ## Roll the cache
+                    self.hidden_cache = roll(self.hidden_cache,0,-1)
+                    self.input_cache = roll(self.input_cache,0,-1)
+                ## Extend the cache to current time step
+                if self.cache_hidden_type == 'top':
+                    self.hidden_cache[self.cache_pointer] = hidden[0][-1,:,:].clone()
+                    current_hidden = hidden[-1,1,:]
+                elif self.cache_hidden_type == 'bottom':
+                    self.hidden_cache[self.cache_pointer] = hidden[0][0,:,:].clone()
+                    current_hidden = hidden[0,1,:]
+                elif self.cache_hidden_type == 'flat':
+                    self.hidden_cache[self.cache_pointer] = hidden[0].view(hidden[0].shape[1],-1).clone()
+                    current_hidden = hidden.view(1,-1)
+                self.input_cache[self.cache_pointer] = input.clone()
 
-        output = self.drop(output)
-        decoded = self.decoder(output.view(output.size(0)*output.size(1), output.size(2)))
-        return decoded.view(output.size(0), output.size(1), decoded.size(1)), hidden
+                if self.cache_pointer > 0:
+                    ## Use the cached states
+                    cache_query = torch.zeros(self.encoder.num_embeddings)
+                    for i in range(self.cache_pointer):
+                        cache_query += self.input_cache[i + 1] * torch.exp(self.cache_theta * \
+                                                                 torch.dot(current_hidden,self.hidden_cache[i]))
+                    output_t = (1 - self.cache_lambda) * output_t + self.cache_lambda * cache_query
+                    
+                output[seqix,:,:] = output_t.clone()
+
+                if self.cache_pointer != self.cache_size - 1:
+                    self.cache_pointer = min(self.cache_size - 1,self.cache_pointer + input.shape[0])
+    
+            output = self.drop(output)
+            decoded = self.decoder(output.view(output.size(0)*output.size(1), output.size(2)))
+            return decoded.view(output.size(0), output.size(1), decoded.size(1)), hidden
 
     def init_hidden(self, bsz):
         weight = next(self.parameters()).data
