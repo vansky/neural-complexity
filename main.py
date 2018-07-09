@@ -531,6 +531,9 @@ else:
         else:
             #Run on CPUs
             model = torch.load(f, map_location=lambda storage, loc: storage)
+    if not hasattr(model,'use_cache'):
+        ## Backwards compatibility for models trained without a cache
+        model.use_cache = False
     if args.cache and (not model.use_cache or args.manual_cache_tuning):
         ## Use an default tuned or manually tuned cache
         ## To tune the cache, use --cache on a pretrained model without --test
