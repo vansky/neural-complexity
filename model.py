@@ -44,20 +44,26 @@ class RNNModel(nn.Module):
         self.decoder.bias.data.fill_(0)
         self.decoder.weight.data.uniform_(-initrange, initrange)
 
-    def init_cache(self,cache_size=2000,cache_theta=0.3,cache_lambda=0.1,batch_size=10):
+    def init_cache(self,cache_size=2000,cache_theta=0.3,cache_lambda=0.1,batch_size=10,cache_hidden_type='flat'):
         self.use_cache = True
         self.cache_size = cache_size
         self.cache_theta = cache_theta
         self.cache_lambda = cache_lambda
         self.cache_pointer = 0
-        self.hidden_cache = torch.Tensor(self.cache_size,batch_size,self.nhid)
-        self.input_cache = torch.Tensor(self.cache_size,batch_size,self.encoder.num_embeddings)
-        self.cache_hidden_type = "flat" ##{"top","bottom", "flat"}
+        self.cache_hidden_type = cache_hidden_type ##{"top","bottom", "flat"}
+        if self.cache_hidden_type == 'flat':
+            self.hidden_cache = torch.cuda.FloatTensor(self.cache_size,batch_size,self.nhid*self.nlayers)
+        else:
+            self.hidden_cache = torch.cuda.FloatTensor(self.cache_size,batch_size,self.nhid)
+        self.input_cache = torch.cuda.FloatTensor(self.cache_size,batch_size,self.encoder.num_embeddings)
 
     def reset_cache(self,batch_size=1):
         self.cache_pointer = 0
-        self.hidden_cache = torch.Tensor(self.cache_size,batch_size,self.nhid)
-        self.input_cache = torch.Tensor(self.cache_size,batch_size,self.encoder.num_embeddings)
+        if self.cache_hidden_type == 'flat':
+            self.hidden_cache = torch.cuda.FloatTensor(self.cache_size,batch_size,self.nhid*self.nlayers)
+        else:
+            self.hidden_cache = torch.cuda.FloatTensor(self.cache_size,batch_size,self.nhid)
+        self.input_cache = torch.cuda.FloatTensor(self.cache_size,batch_size,self.encoder.num_embeddings)
 
     def roll(tensor, shift, axis):
         if shift == 0:
@@ -87,6 +93,11 @@ class RNNModel(nn.Module):
             ## We're using the cache, so we need intermediate hidden states
             ## Therefore, we need to iterate over the time dimension
             output = torch.zeros(input.shape[0],input.shape[1],self.nhid)
+            #print(self.input_cache[self.cache_pointer:self.cache_pointer+input.shape[0]].shape)
+            #print(input.unsqueeze(2).shape)
+            input_1hot = torch.cuda.FloatTensor(input.shape[0],input.shape[1],self.encoder.num_embeddings).zero_()
+            input_1hot.scatter_(2,input.unsqueeze(2).data,1)
+            self.input_cache[self.cache_pointer:self.cache_pointer+input.shape[0]] = input_1hot.clone()
             for seqix in range(input.shape[0]):
                 ## step through the input
                 emb_t = self.drop(self.encoder(input[seqix].unsqueeze(0)))
@@ -103,25 +114,49 @@ class RNNModel(nn.Module):
                     self.input_cache = roll(self.input_cache,0,-1)
                 ## Extend the cache to current time step
                 if self.cache_hidden_type == 'top':
-                    self.hidden_cache[self.cache_pointer] = hidden[0][-1,:,:].clone()
-                    current_hidden = hidden[-1,1,:]
+                    self.hidden_cache[self.cache_pointer] = hidden[0][-1,:,:].data.clone()
+                    current_hidden = hidden[0][-1,:,:].data
                 elif self.cache_hidden_type == 'bottom':
-                    self.hidden_cache[self.cache_pointer] = hidden[0][0,:,:].clone()
-                    current_hidden = hidden[0,1,:]
+                    self.hidden_cache[self.cache_pointer] = hidden[0][0,:,:].data.clone()
+                    current_hidden = hidden[0][0,:,:].data
                 elif self.cache_hidden_type == 'flat':
-                    self.hidden_cache[self.cache_pointer] = hidden[0].view(hidden[0].shape[1],-1).clone()
-                    current_hidden = hidden.view(1,-1)
-                self.input_cache[self.cache_pointer] = input.clone()
+                    #print(self.hidden_cache[self.cache_pointer,:,:].shape)
+                    #print(hidden[0].view(hidden[0].shape[1],-1).data.shape)
+                    self.hidden_cache[self.cache_pointer,:,:] = hidden[0].view(hidden[0].shape[1],-1).data.clone()
+                    current_hidden = hidden[0].view(self.input_cache.shape[1],1,-1).data #hidden[0].shape[1],-1)
 
                 if self.cache_pointer > 0:
                     ## Use the cached states
-                    cache_query = torch.zeros(self.encoder.num_embeddings)
+                    cache_query = torch.zeros(self.input_cache.shape[1],self.encoder.num_embeddings).cuda()
+                    #hidden_cache_t = Variable(self.hidden_cache[0].view(self.input_cache.shape[1],-1,1))
+                    #print(str(type(self.cache_theta)))
+                    #print(type(torch.bmm(current_hidden, hidden_cache_t)),torch.bmm(current_hidden, hidden_cache_t).shape)
+                    #print(str(type(torch.exp(self.cache_theta * torch.bmm(current_hidden, hidden_cache_t).data).cuda())),\
+                    #      str(torch.exp(self.cache_theta * torch.bmm(current_hidden, hidden_cache_t).data).shape)
+                    #      )
+                    #print(str(cache_query.shape),\
+                    #      str(torch.bmm(self.input_cache[1].view(self.input_cache.shape[1],self.encoder.num_embeddings,1),
+                    #                    torch.exp(self.cache_theta * torch.bmm(current_hidden, hidden_cache_t).data).cuda()).shape),\
+                    #      str(torch.bmm(self.input_cache[1].view(self.input_cache.shape[1],self.encoder.num_embeddings,1),torch.exp(self.cache_theta * torch.bmm(current_hidden, hidden_cache_t).data).cuda()).view(self.input_cache.shape[1],self.encoder.num_embeddings).shape))
+                    hidden_cache_t = self.hidden_cache[0].view(self.input_cache.shape[1],-1,1)
+                    print('cache_pointer',str(self.cache_pointer))
+                    print('current_hidden',type(current_hidden))
+                    print('hidden_cache_t',type(hidden_cache_t))
+                    print('input_cache',type(self.input_cache[1].view(self.input_cache.shape[1],self.encoder.num_embeddings,1)))
+                    print('exp1',type(torch.exp(self.cache_theta * torch.bmm(current_hidden, hidden_cache_t))),torch.exp(self.cache_theta * torch.bmm(current_hidden, hidden_cache_t)).shape)
+                    print('exp2',type(torch.exp(self.cache_theta * torch.bmm(current_hidden, hidden_cache_t)).cuda()),torch.exp(self.cache_theta * torch.bmm(current_hidden, hidden_cache_t)).cuda().shape)
+                    print('exp3',type(torch.exp(self.cache_theta * torch.bmm(current_hidden, hidden_cache_t)).cuda().view(-1,1,1)),torch.exp(self.cache_theta * torch.bmm(current_hidden, hidden_cache_t)).cuda().view(-1,1,1).shape)
                     for i in range(self.cache_pointer):
-                        cache_query += self.input_cache[i + 1] * torch.exp(self.cache_theta * \
-                                                                 torch.dot(current_hidden,self.hidden_cache[i]))
-                    output_t = (1 - self.cache_lambda) * output_t + self.cache_lambda * cache_query
+                        #hidden_cache_t = Variable(self.hidden_cache[i].view(self.input_cache.shape[1],-1,1))
+                        hidden_cache_t = self.hidden_cache[i].view(self.input_cache.shape[1],-1,1)
+                        cache_query += torch.bmm(self.input_cache[i + 1].view(self.input_cache.shape[1],self.encoder.num_embeddings,1),
+                                                 torch.exp(self.cache_theta * torch.bmm(current_hidden, hidden_cache_t)).cuda())
+                    print(self.decoder(output_t.view(output_t.size(0)*output_t.size(1), output_t.size(2))).shape)
+                    print(cache_query.shape)
+                    output_t = (1 - self.cache_lambda) * self.decoder(output_t.view(output_t.size(0)*output_t.size(1), output_t.size(2))) + self.cache_lambda * cache_query
+                    raise
                     
-                output[seqix,:,:] = output_t.clone()
+                output[seqix,:,:] = output_t.data.clone()
 
                 if self.cache_pointer != self.cache_size - 1:
                     self.cache_pointer += 1

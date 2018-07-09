@@ -504,12 +504,10 @@ if not args.test:
                 #Run on CPUs
                 model = torch.load(f, map_location=lambda storage, loc: storage)
 
-        model.init_cache(cache_size=args.cache_size,batch_size=eval_batch_size)
-        model.cache_hidden_type = args.cache_hidden_type
+        model.init_cache(cache_size=args.cache_size,batch_size=eval_batch_size,cache_hidden_type=args.cache_hidden_type)
         ## Tune cache hyperparameters
         for l in np.arange(0.05,0.55,0.1):
             for theta in np.arange(0.1,1.1,0.1):
-                model.reset_cache(batch_size=eval_batch_size)
                 model.cache_theta = theta
                 model.cache_lambda = l
                 val_loss = evaluate(val_data)
@@ -523,6 +521,7 @@ if not args.test:
                     with open(args.cache_model_file, 'wb') as f:
                         torch.save(model, f)
                         best_val_loss = val_loss
+                model.reset_cache(batch_size=eval_batch_size)
 else:
     # Load the best saved model.
     with open(args.model_file, 'rb') as f:
