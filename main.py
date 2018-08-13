@@ -331,6 +331,8 @@ def test_evaluate(test_sentences, data_source):
     ntokens = len(corpus.dictionary)
     if args.complexn > ntokens or args.complexn <= 0:
         args.complexn = ntokens
+        if args.guessn > ntokens:
+            args.guessn = ntokens
         sys.stderr.write('Using beamsize: '+str(ntokens)+'\n')
     else:
         sys.stderr.write('Using beamsize: '+str(args.complexn)+'\n')
