@@ -61,23 +61,29 @@ These parameters help specify the model
 ### Data parameters
 These parameters specify the data to use
 
-    --model_file [PATH]: Path for saving/loading trained model (default: model.pt)  
+    --model_file [PATH]: Path for saving/loading trained model (default: model.pt)
+    --adapted_model [PATH]: Path for saving adapted model (default: adaptedmodel.pt)  
     --data_dir [PATH]: Directory of the corpus data (default: data/wikitext-2)  
     --vocab_file [PATH]: Path to store the training vocab (default: vocab.txt)
                          If the file has an extension of .bin the vocab will be binarized
     --trainfname [FILE]: Name of training file within the data directory (default: train.txt)  
     --validfname [FILE]: Name of validation file within the data directory (default: valid.txt)  
-    --testfname [FILE]: Name of test file within the data directory (default: test.txt)
+    --testfname [FILE]: Name of test file within the data directory (default: test.txt)  
     
 ### Runtime parameters
 These parameters specify runtime options for using the model
 
-    --log_interval [INT]: Number of batches between log outputs (default: 200)  
-    --single: If present with --cuda, use only a single GPU even if more are present (default: absent)  
     --test: If present, operate on test data; otherwise, train the model (default: absent)  
+    --single: If present with --cuda, use only a single GPU even if more are present (default: absent)  
+
+    --adapt: If present, adapt model weights during evaluation (default: absent)
+             See [van Schijndel and Linzen (2018)](https://vansky.github.io/assets/pdf/vanschijndel_linzen-2018-emnlp_adapt.pdf) for details
     --interact: If present, load the model for interactive use (default: absent)  
+    
+    --words: If present, output word-by-word complexity instead of sentence-level loss (default: absent)
+    --log_interval [INT]: Number of batches between log outputs (default: 200)  
     --nopp: If present, suppress evaluation perplexity output (default: absent)  
-    --words: If present, output word-by-word complexity instead of sentence-level loss (default: absent)  
+    --nocheader: If present, suppress complexity header in output (default: absent)  
     --csep [CHAR]: Use specified character as separator for complexity output (default: ' ')  
     
     --guess: If present, display model's best guess(es) at each time step (default: absent)

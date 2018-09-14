@@ -61,8 +61,8 @@ parser.add_argument('--cuda', action='store_true',
 ## Data parameters
 parser.add_argument('--model_file', type=str,  default='model.pt',
                     help='path to save the final model')
-parser.add_argument('--saveadapted', type=str,  default='adaptedmodel.pt',
-                    help='new path to save the final adapted model') ##NB: rename
+parser.add_argument('--adapted_model', type=str,  default='adaptedmodel.pt',
+                    help='new path to save the final adapted model')
 parser.add_argument('--data_dir', type=str, default='./data/wikitext-2',
                     help='location of the corpus data')
 parser.add_argument('--vocab_file', type=str, default='vocab.txt',
@@ -75,18 +75,28 @@ parser.add_argument('--testfname', type=str, default='test.txt',
                     help='name of the test file')
 
 ## Runtime parameters
-parser.add_argument('--log_interval', type=int, default=200, metavar='N',
-                    help='report interval')
-parser.add_argument('--single', action='store_true',
-                    help='use only a single GPU (even if more are available)')
 parser.add_argument('--test', action='store_true',
                     help='test a trained LM')
-parser.add_argument('--words', action='store_true',
-                    help='evaluate word-level complexities (instead of sentence-level loss)')
+parser.add_argument('--single', action='store_true',
+                    help='use only a single GPU (even if more are available)')
+
+parser.add_argument('--adapt', action='store_true',
+                    help='adapt model weights during evaluation')
 parser.add_argument('--interact', action='store_true',
                     help='run a trained network interactively')
+
+parser.add_argument('--words', action='store_true',
+                    help='evaluate word-level complexities (instead of sentence-level loss)')
+parser.add_argument('--log_interval', type=int, default=200, metavar='N',
+                    help='report interval')
+
+parser.add_argument('--nopp', action='store_true',
+                    help='suppress evaluation perplexity output')
+parser.add_argument('--nocheader', action='store_true',
+                    help='suppress complexity header')
 parser.add_argument('--csep', type=str, default=' ',
                     help='change the separator in the complexity output')
+
 parser.add_argument('--guess', action='store_true',
                     help='display best guesses at each time step')
 parser.add_argument('--guessn', type=int, default=1,
@@ -99,14 +109,10 @@ parser.add_argument('--guessprobs', action='store_true',
                     help='display guess probs along with guesses')
 parser.add_argument('--complexn', type=int, default=0,
                     help='compute complexity only over top n guesses (0 = all guesses)')
+
 parser.add_argument('--softcliptopk', action="store_true",
                     help='soften non top-k options instead of removing them')
-parser.add_argument('--nopp', action='store_true',
-                    help='suppress evaluation perplexity output')
-parser.add_argument('--nocheader', action='store_true',
-                    help='suppress complexity header') ## NB: rename
-parser.add_argument('--adapt', action='store_true',
-                    help='adapt model weights during evaluation')
+
 args = parser.parse_args()
 
 if args.interact:
@@ -518,7 +524,7 @@ else:
                test_evaluate(test_sents, test_data)
 
                if args.adapt:
-                   with open(args.saveadapted, 'wb') as f:
+                   with open(args.adapted_model, 'wb') as f:
                        torch.save(model, f)
         except KeyboardInterrupt:
             print(' ')
@@ -526,7 +532,7 @@ else:
     else:
         test_loss = test_evaluate(test_sents, test_data)
         if args.adapt:
-            with open(args.saveadapted, 'wb') as f:
+            with open(args.adapted_model, 'wb') as f:
                 torch.save(model, f)
     if not args.interact and not args.nopp:
         print('=' * 89)
