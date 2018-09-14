@@ -87,7 +87,7 @@ These parameters specify runtime options for using the model
     --single: If present with --cuda, use only a single GPU even if more are present (default: absent)  
 
     --adapt: If present, adapt model weights during evaluation (default: absent)
-             See [van Schijndel and Linzen (2018)](https://vansky.github.io/assets/pdf/vanschijndel_linzen-2018-emnlp_adapt.pdf) for details
+             See van Schijndel and Linzen (2018) for details
     --interact: If present, load the model for interactive use (default: absent)  
     
     --words: If present, output word-by-word complexity instead of sentence-level loss (default: absent)
@@ -102,3 +102,7 @@ These parameters specify runtime options for using the model
     --guessratios: If present, output guess scores normalized by best guess (default: absent)  
     --guessprobs: If present, output guess probabilities along with each guess (default: absent)  
     --complexn [INT]: Compute complexity over best N guesses instead of over full vocab (default: 0 aka full vocab)  
+
+### References
+
+Marten van Schijndel and Tal Linzen. ["A Neural Model of Adaptation in Reading."](https://vansky.github.io/assets/pdf/vanschijndel_linzen-2018-emnlp_adapt.pdf) In 2018 Conference on Empirical Methods in Natural Language Processing (EMNLP 2018). 2018.
