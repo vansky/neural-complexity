@@ -61,6 +61,8 @@ parser.add_argument('--cuda', action='store_true',
 ## Data parameters
 parser.add_argument('--model_file', type=str,  default='model.pt',
                     help='path to save the final model')
+parser.add_argument('--saveadapted', type=str,  default='adaptedmodel.pt',
+                    help='new path to save the final adapted model') ##NB: rename
 parser.add_argument('--data_dir', type=str, default='./data/wikitext-2',
                     help='location of the corpus data')
 parser.add_argument('--vocab_file', type=str, default='vocab.txt',
@@ -101,6 +103,10 @@ parser.add_argument('--softcliptopk', action="store_true",
                     help='soften non top-k options instead of removing them')
 parser.add_argument('--nopp', action='store_true',
                     help='suppress evaluation perplexity output')
+parser.add_argument('--nocheader', action='store_true',
+                    help='suppress complexity header') ## NB: rename
+parser.add_argument('--adapt', action='store_true',
+                    help='adapt model weights during evaluation')
 args = parser.parse_args()
 
 if args.interact:
@@ -270,7 +276,7 @@ def get_complexity(o,t,sentid):
                     ## output scores (ratio of score(x)/score(best guess)
                     outputguesses.append("{:.3f}".format(float(guessscores[corpuspos][g])/float(guessscores[corpuspos][0])))
                 elif args.guessprobs:
-                  ##output probabilities ## Currently normalizes probs over N-best list; ideally it'd normalize to probs before getting the N-best
+                  ## output probabilities ## Currently normalizes probs over N-best list; ideally it'd normalize to probs before getting the N-best
                   outputguesses.append("{:.3f}".format(math.exp(float(nn.functional.log_softmax(guessscores[corpuspos],dim=0)[g]))))
             outputguesses = args.csep.join(outputguesses)
             print(args.csep.join([str(word),str(sentid),str(corpuspos),str(len(word)),str(float(surp)),str(float(Hs[corpuspos])),str(max(0,float(Hs[max(corpuspos-1,0)])-float(Hs[corpuspos]))),str(outputguesses)]))
@@ -338,20 +344,21 @@ def test_evaluate(test_sentences, data_source):
         sys.stderr.write('Using beamsize: '+str(args.complexn)+'\n')
 
     if args.words:
-        if args.complexn == ntokens:
-            print('word{0}sentid{0}sentpos{0}wlen{0}surp{0}entropy{0}entred'.format(args.csep), end='')
-        else:
-            print('word{0}sentid{0}sentpos{0}wlen{0}surp{1}{0}entropy{1}{0}entred{1}'.format(args.csep,args.complexn), end='')
-        if args.guess:
-            for i in range(args.guessn):
-                print('{0}guess'.format(args.csep)+str(i), end='')
-                if args.guessscores:
-                    print('{0}gscore'.format(args.csep)+str(i), end='')
-                elif args.guessprobs:
-                    print('{0}gprob'.format(args.csep)+str(i), end='')
-                elif args.guessratios:
-                    print('{0}gratio'.format(args.csep)+str(i), end='')
-        sys.stdout.write('\n')
+        if not args.nocheader:
+            if args.complexn == ntokens:
+                print('word{0}sentid{0}sentpos{0}wlen{0}surp{0}entropy{0}entred'.format(args.csep), end='')
+            else:
+                print('word{0}sentid{0}sentpos{0}wlen{0}surp{1}{0}entropy{1}{0}entred{1}'.format(args.csep,args.complexn), end='')
+            if args.guess:
+                for i in range(args.guessn):
+                    print('{0}guess'.format(args.csep)+str(i), end='')
+                    if args.guessscores:
+                        print('{0}gscore'.format(args.csep)+str(i), end='')
+                    elif args.guessprobs:
+                        print('{0}gprob'.format(args.csep)+str(i), end='')
+                    elif args.guessratios:
+                        print('{0}gratio'.format(args.csep)+str(i), end='')
+            sys.stdout.write('\n')
     if PROGRESS:
         bar = Bar('Processing', max=len(data_source))
     for i in range(len(data_source)):
@@ -364,19 +371,29 @@ def test_evaluate(test_sentences, data_source):
             hidden = model.module.init_hidden(1) # number of parallel sentences being processed
         else:
             hidden = model.init_hidden(1) # number of parallel sentences being processed
-        data, targets = test_get_batch(sent_ids, evaluation=True)
+        # set batch as volatile if adapting
+        data, targets = test_get_batch(sent_ids, evaluation=not args.adapt)
         data=data.unsqueeze(1) # only needed if there is just a single sentence being processed
         output, hidden = model(data, hidden)
         output_flat = output.view(-1, ntokens)
-        curr_loss = criterion(output_flat, targets).data
+        curr_loss = criterion(output_flat, targets)
         #curr_loss = len(data) * criterion(output_flat, targets).data # needed if there is more than a single sentence being processed
-        total_loss += curr_loss
+        total_loss += curr_loss.data
         if args.words:
             # output word-level complexity metrics
             get_complexity(output_flat,targets,i)
         else:
             # output sentence-level loss
-            print(str(sent)+":"+str(curr_loss[0]))
+            print(str(sent)+":"+str(curr_loss.data[0]))
+
+        if args.adapt:
+            curr_loss.backward()
+
+            # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.             
+            torch.nn.utils.clip_grad_norm(model.parameters(), args.clip)
+            for p in model.parameters():
+                p.data.add_(-lr, p.grad.data)
+
         hidden = repackage_hidden(hidden)
         if PROGRESS:
             bar.next()
@@ -499,11 +516,18 @@ else:
                instr = input('Input a sentence: ')
                test_sents, test_data = corpus.online_tokenize_with_unks(instr)
                test_evaluate(test_sents, test_data)
+
+               if args.adapt:
+                   with open(args.saveadapted, 'wb') as f:
+                       torch.save(model, f)
         except KeyboardInterrupt:
             print(' ')
             pass
     else:
         test_loss = test_evaluate(test_sents, test_data)
+        if args.adapt:
+            with open(args.saveadapted, 'wb') as f:
+                torch.save(model, f)
     if not args.interact and not args.nopp:
         print('=' * 89)
         print('| End of testing | test loss {:5.2f} | test ppl {:8.2f}'.format(

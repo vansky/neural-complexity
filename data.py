@@ -227,7 +227,7 @@ class SentenceCorpus(object):
                                 ids[token] = self.dictionary.word2idx[word]
                             token += 1
         return ids
-        
+
     def sent_tokenize_with_unks(self, path):
         """Tokenizes a text file into sentences, adding unks if needed."""
         assert os.path.exists(path)
