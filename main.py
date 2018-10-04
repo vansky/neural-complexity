@@ -210,9 +210,8 @@ def get_entropy(o):
 
     probs = nn.functional.softmax(beam,dim=0)
     logprobs = nn.functional.log_softmax(beam,dim=0) #numerically more stable than two separate operations
-    prod = probs * logprobs
-    prod[prod != prod] = 0 #set nans to 0
-    return -1 * torch.sum(prod)
+    prod = probs.data * logprobs.data
+    return torch.Tensor([-1 * torch.sum(prod[prod == prod])]) ## sum but ignore nans
 
 def get_surps(o):
     ## o should be a vector scoring possible classes
