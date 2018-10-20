@@ -127,6 +127,8 @@ if torch.cuda.is_available():
         print("WARNING: You have a CUDA device, so you should probably run with --cuda")
     else:
         torch.cuda.manual_seed(args.seed)
+        if (torch.cuda.device_count() == 1):
+            args.single = True
 
 ###############################################################################
 # Load data
@@ -486,7 +488,10 @@ if not args.test and not args.interact:
             # Save the model if the validation loss is the best we've seen so far.
             if not best_val_loss or val_loss < best_val_loss:
                 with open(args.model_file, 'wb') as f:
-                    torch.save(model, f)
+                    if args.cuda and not args.single:
+                        torch.save(model.module, f)
+                    else:
+                        torch.save(model, f)
                     best_val_loss = val_loss
             else:
                 # Anneal the learning rate if no improvement has been seen in the validation dataset.
@@ -509,6 +514,8 @@ else:
             #Run on CPUs
             model = torch.load(f, map_location=lambda storage, loc: storage)
 
+    if not hasattr(model, 'module'):
+        args.single = True
     # Run on test data.
     if args.interact:
         # First fix Python 2.x input command
