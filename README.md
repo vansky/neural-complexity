@@ -105,4 +105,4 @@ These parameters specify runtime options for using the model
 
 ### References
 
-Marten van Schijndel and Tal Linzen. ["A Neural Model of Adaptation in Reading."](https://vansky.github.io/assets/pdf/vanschijndel_linzen-2018-emnlp_adapt.pdf) In 2018 Conference on Empirical Methods in Natural Language Processing (EMNLP 2018). 2018.
+Marten van Schijndel and Tal Linzen. ["A Neural Model of Adaptation in Reading."](http://aclweb.org/anthology/D18-1499) In 2018 Conference on Empirical Methods in Natural Language Processing (EMNLP 2018). 2018.
