@@ -151,14 +151,14 @@ class SentenceCorpus(object):
         """Tokenizes a text file, adding unks if needed."""
         assert os.path.exists(path)
         if path[-2:] == 'gz':
-            # Add words to the dictionary
+            # Determine the length of the corpus
             with gzip.open(path, 'rb') as f:
                 tokens = 0
                 FIRST = True
                 for fchunk in f.readlines():
                     for line in sent_tokenize(fchunk.decode("utf-8")):
                         if line.strip() == '':
-                            #ignore blank lines
+                            # ignore blank lines
                             continue
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
@@ -175,7 +175,7 @@ class SentenceCorpus(object):
                 for fchunk in f.readlines():
                     for line in sent_tokenize(fchunk.decode("utf-8")):
                         if line.strip() == '':
-                            #ignore blank lines
+                            # ignore blank lines
                             continue
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
@@ -183,20 +183,21 @@ class SentenceCorpus(object):
                         else:
                             words = line.split() + ['<eos>']
                         for word in words:
+                            # unk words that are OOV
                             if word not in self.dictionary.word2idx:
                                 ids[token] = self.dictionary.add_word("<unk>")
                             else:
                                 ids[token] = self.dictionary.word2idx[word]
                             token += 1
         else:
-            # Add words to the dictionary
+            # Determine the length of the corpus
             with open(path, 'r') as f:
                 tokens = 0
                 FIRST = True
                 for fchunk in f:
                     for line in sent_tokenize(fchunk):
                         if line.strip() == '':
-                            #ignore blank lines
+                            # ignore blank lines
                             continue
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
@@ -213,7 +214,7 @@ class SentenceCorpus(object):
                 for fchunk in f:
                     for line in sent_tokenize(fchunk):
                         if line.strip() == '':
-                            #ignore blank lines
+                            # ignore blank lines
                             continue
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
@@ -221,6 +222,7 @@ class SentenceCorpus(object):
                         else:
                             words = line.split() + ['<eos>']
                         for word in words:
+                            # unk words that are OOV
                             if word not in self.dictionary.word2idx:
                                 ids[token] = self.dictionary.add_word("<unk>")
                             else:
@@ -238,7 +240,7 @@ class SentenceCorpus(object):
                 for fchunk in f.readlines():
                     for line in sent_tokenize(fchunk.decode("utf-8")):
                         if line.strip() == '':
-                            #ignore blank lines
+                            # ignore blank lines
                             continue
                         sents.append(line.strip())
                         words = ['<eos>'] + line.split() + ['<eos>']
@@ -248,6 +250,7 @@ class SentenceCorpus(object):
                         ids = torch.LongTensor(tokens)
                         token = 0
                         for word in words:
+                            # unk words that are OOV
                             if word not in self.dictionary.word2idx:
                                 ids[token] = self.dictionary.add_word("<unk>")
                             else:
@@ -259,7 +262,7 @@ class SentenceCorpus(object):
                 for fchunk in f:
                     for line in sent_tokenize(fchunk):
                         if line.strip() == '':
-                            #ignore blank lines
+                            # ignore blank lines
                             continue
                         sents.append(line.strip())
                         words = ['<eos>'] + line.split() + ['<eos>']
@@ -269,6 +272,7 @@ class SentenceCorpus(object):
                         ids = torch.LongTensor(tokens)
                         token = 0
                         for word in words:
+                            # unk words that are OOV
                             if word not in self.dictionary.word2idx:
                                 ids[token] = self.dictionary.add_word("<unk>")
                             else:
@@ -289,6 +293,7 @@ class SentenceCorpus(object):
         ids = torch.LongTensor(tokens)
         token = 0
         for word in words:
+            # unk words that are OOV
             if word not in self.dictionary.word2idx:
                 ids[token] = self.dictionary.add_word("<unk>")
             else:
