@@ -4,7 +4,6 @@ import time
 import math
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
 import data
 import model
 import sys
@@ -17,20 +16,21 @@ try:
 except:
     PROGRESS = False
 
-warnings.filterwarnings("ignore") #suppress SourceChangeWarnings
+# suppress SourceChangeWarnings
+warnings.filterwarnings("ignore")
 
 sys.stderr.write('Libraries loaded\n')
 
-## Parallelization notes:
-##   Does not currently operate across multiple nodes
-##   Single GPU is better for default: tied,emsize:200,nhid:200,nlayers:2,dropout:0.2
-##
-##   Multiple GPUs are better for tied,emsize:1500,nhid:1500,nlayers:2,dropout:0.65
-##      4 GPUs train on wikitext-2 in 1/2 - 2/3 the time of 1 GPU
+# Parallelization notes:
+#   Does not currently operate across multiple nodes
+#   Single GPU is better for default: tied,emsize:200,nhid:200,nlayers:2,dropout:0.2
+#
+#   Multiple GPUs are better for tied,emsize:1500,nhid:1500,nlayers:2,dropout:0.65
+#      4 GPUs train on wikitext-2 in 1/2 - 2/3 the time of 1 GPU
 
 parser = argparse.ArgumentParser(description='PyTorch RNN/LSTM Language Model')
 
-## Model parameters
+# Model parameters
 parser.add_argument('--model', type=str, default='LSTM',
                     help='type of recurrent net (RNN_TANH, RNN_RELU, LSTM, GRU)')
 parser.add_argument('--emsize', type=int, default=200,
@@ -58,7 +58,7 @@ parser.add_argument('--seed', type=int, default=1111,
 parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
 
-## Data parameters
+# Data parameters
 parser.add_argument('--model_file', type=str,  default='model.pt',
                     help='path to save the final model')
 parser.add_argument('--adapted_model', type=str,  default='adaptedmodel.pt',
@@ -74,7 +74,7 @@ parser.add_argument('--validfname', type=str, default='valid.txt',
 parser.add_argument('--testfname', type=str, default='test.txt',
                     help='name of the test file')
 
-## Runtime parameters
+# Runtime parameters
 parser.add_argument('--test', action='store_true',
                     help='test a trained LM')
 parser.add_argument('--single', action='store_true',
@@ -130,6 +130,9 @@ if torch.cuda.is_available():
         if (torch.cuda.device_count() == 1):
             args.single = True
 
+device = torch.device("cuda" if args.cuda else "cpu")
+
+
 ###############################################################################
 # Load data
 ###############################################################################
@@ -154,9 +157,7 @@ def batchify(data, bsz):
     # Evenly divide the data across the bsz batches.
     data = data.view(bsz, -1).t().contiguous()
     # Turning the data over to CUDA at this point may lead to more OOM errors
-    #if args.cuda:
-     #    data = data.cuda()
-    return data
+    return data.to(device)
 
 eval_batch_size = 10
 
@@ -178,7 +179,7 @@ if not args.interact:
 
 if not args.test and not args.interact:
     ntokens = len(corpus.dictionary)
-    model = model.RNNModel(args.model, ntokens, args.emsize, args.nhid, args.nlayers, args.dropout, args.tied)
+    model = model.RNNModel(args.model, ntokens, args.emsize, args.nhid, args.nlayers, args.dropout, args.tied).to(device)
     if args.cuda:
         if (not args.single) and (torch.cuda.device_count() > 1):
             # Scatters minibatches (in dim=1) across available GPUs
@@ -192,53 +193,42 @@ criterion = nn.CrossEntropyLoss()
 ###############################################################################
 
 def get_entropy(o):
-    ## o should be a vector scoring possible classes
-    ## returns a scalar entropy over o
+    # o should be a vector scoring possible classes
+    # returns a scalar entropy over o
     if args.complexn == 0:
         beam = o
     else:
         # duplicate o but with all losing guesses set to 0
         beamk,beamix = torch.topk(o,args.complexn,0)
-        if args.cuda:
-            if args.softcliptopk:
-                beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(0)).scatter(0,beamix,beamk)
-            else:
-                beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
+        if args.softcliptopk:
+            beam = torch.FloatTensor(o.size()).fill_(0).scatter(0,beamix,beamk).to(device)
         else:
-            if args.softcliptopk:
-                beam = Variable(torch.zeros(o.size())).scatter(0,beamix,beamk)
-            else:
-                beam = Variable(torch.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
+            beam = torch.FloatTensor(o.size()).fill_(float("-inf")).scatter(0,beamix,beamk).to(device)
 
     probs = nn.functional.softmax(beam,dim=0)
-    logprobs = nn.functional.log_softmax(beam,dim=0) #numerically more stable than two separate operations
+    # log_softmax is numerically more stable than two separate operations
+    logprobs = nn.functional.log_softmax(beam,dim=0)
     prod = probs.data * logprobs.data
-    return torch.Tensor([-1 * torch.sum(prod[prod == prod])]) ## sum but ignore nans
+    return torch.Tensor([-1 * torch.sum(prod[prod == prod])]).to(device) # sum but ignore nans
 
 def get_surps(o):
-    ## o should be a vector scoring possible classes
-    ## returns a vector containing the surprisal of each class in o
+    # o should be a vector scoring possible classes
+    # returns a vector containing the surprisal of each class in o
     if args.complexn == 0:
         beam = o
     else:
         # duplicate o but with all losing guesses set to 0
         beamk,beamix = torch.topk(o,args.complexn,0)
-        if args.cuda:
-            if args.softcliptopk:
-                beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(0)).scatter(0,beamix,beamk)
-            else:
-                beam = Variable(torch.cuda.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
+        if args.softcliptopk:
+            beam = torch.FloatTensor(o.size()).fill_(0).scatter(0,beamix,beamk).to(device)
         else:
-            if args.softcliptopk:
-                beam = Variable(torch.zeros(o.size())).scatter(0,beamix,beamk)
-            else:
-                beam = Variable(torch.FloatTensor(o.size()).fill_(float("-inf"))).scatter(0,beamix,beamk)
+            beam = torch.FloatTensor(o.size()).fill_(float("-inf")).scatter(0,beamix,beamk).to(device)
 
     logprobs = nn.functional.log_softmax(beam,dim=0)
     return -1 * logprobs
 
 def get_guesses(o,scores=False):
-    ## o should be a vector scoring possible classes
+    # o should be a vector scoring possible classes
     guessvals, guessixes = torch.topk(o,args.guessn,0)
     # guessvals are the scores of each input cell
     # guessixes are the indices of the max cells
@@ -257,19 +247,11 @@ def get_complexity(o,t,sentid):
     if args.guess:
         guesses = apply(get_guesses, o)
         guessscores = apply(get_guessscores, o)
-    ## Use dimensional indexing method
-    ## NOTE: For some reason, this doesn't work.
-    ##       May marginally speed things if we can determine why
-    ##       Currently 'probs' ends up equivalent to o after the softmax
-    #probs = nn.functional.softmax(o,dim=0)
-    #logprobs = nn.functional.log_softmax(o,dim=0)
-    #Hs = -1 * torch.sum(probs * logprobs),dim=1)
-    #surps = -1 * logprobs
-    ## Move along
+
     for corpuspos,targ in enumerate(t):
         word = corpus.dictionary.idx2word[int(targ)]
         if word == '<eos>':
-            ## don't output the complexity of EOS
+            # don't output the complexity of EOS
             continue
         surp = surps[corpuspos][int(targ)]
         if args.guess:
@@ -277,13 +259,15 @@ def get_complexity(o,t,sentid):
             for g in range(args.guessn):
                 outputguesses.append(corpus.dictionary.idx2word[int(guesses[corpuspos][g])])
                 if args.guessscores:
-                    ## output raw scores
+                    # output raw scores
                     outputguesses.append("{:.3f}".format(float(guessscores[corpuspos][g])))
                 elif args.guessratios:
-                    ## output scores (ratio of score(x)/score(best guess)
+                    # output scores (ratio of score(x)/score(best guess)
                     outputguesses.append("{:.3f}".format(float(guessscores[corpuspos][g])/float(guessscores[corpuspos][0])))
                 elif args.guessprobs:
-                  ## output probabilities ## Currently normalizes probs over N-best list; ideally it'd normalize to probs before getting the N-best
+                  # output probabilities
+                  # Currently normalizes probs over N-best list;
+                  # ideally it'd normalize to probs before getting the N-best
                   outputguesses.append("{:.3f}".format(math.exp(float(nn.functional.log_softmax(guessscores[corpuspos],dim=0)[g]))))
             outputguesses = args.csep.join(outputguesses)
             print(args.csep.join([str(word),str(sentid),str(corpuspos),str(len(word)),str(float(surp)),str(float(Hs[corpuspos])),str(max(0,float(Hs[max(corpuspos-1,0)])-float(Hs[corpuspos]))),str(outputguesses)]))
@@ -291,7 +275,7 @@ def get_complexity(o,t,sentid):
             print(args.csep.join([str(word),str(sentid),str(corpuspos),str(len(word)),str(float(surp)),str(float(Hs[corpuspos])),str(max(0,float(Hs[max(corpuspos-1,0)])-float(Hs[corpuspos])))]))
 
 def apply(func, M):
-    ## applies a function along a given dimension
+    # applies a function along a given dimension
     tList = [func(m) for m in torch.unbind(M, dim=0) ]
     res = torch.stack(tList, dim=0)
     return res
@@ -301,9 +285,9 @@ def apply(func, M):
 ###############################################################################
 
 def repackage_hidden(h):
-    """Wraps hidden states in new Variables, to detach them from their history."""
-    if type(h) == Variable:
-        return Variable(h.data)
+    """Wraps hidden states in new Tensors, to detach them from their history."""
+    if isinstance(h, torch.Tensor):
+        return h.detach()
     else:
         return tuple(repackage_hidden(v) for v in h)
 
@@ -317,30 +301,22 @@ def repackage_hidden(h):
 # by the batchify function. The chunks are along dimension 0, corresponding
 # to the seq_len dimension in the LSTM.
 
-def test_get_batch(source, evaluation=False):
+def test_get_batch(source):
     seq_len = len(source) - 1
-    data = Variable(source[:seq_len], volatile=evaluation)
-    target = Variable(source[1:1+seq_len].view(-1))
-    # This is where data should be CUDA-fied to lessen OOM errors
-    if args.cuda:
-        return data.cuda(), target.cuda()
-    else:
-        return data, target
+    data = source[:seq_len]
+    target = source[1:1+seq_len].view(-1)
+    return data, target
 
-def get_batch(source, i, evaluation=False):
+def get_batch(source, i):
     seq_len = min(args.bptt, len(source) - 1 - i)
-    data = Variable(source[i:i+seq_len], volatile=evaluation)
-    target = Variable(source[i+1:i+1+seq_len].view(-1))
-    #This is where data should be CUDA-fied to lessen OOM errors
-    if args.cuda:
-        return data.cuda(), target.cuda()
-    else:
-        return data, target
+    data = source[i:i+seq_len]
+    target = source[i+1:i+1+seq_len].view(-1)
+    return data, target
 
 def test_evaluate(test_sentences, data_source):
     # Turn on evaluation mode which disables dropout.
     model.eval()
-    total_loss = 0
+    total_loss = 0.
     ntokens = len(corpus.dictionary)
     if args.complexn > ntokens or args.complexn <= 0:
         args.complexn = ntokens
@@ -370,68 +346,66 @@ def test_evaluate(test_sentences, data_source):
         bar = Bar('Processing', max=len(data_source))
     for i in range(len(data_source)):
         sent_ids = data_source[i]
+        # We predict all words but the first, so determine loss for those
         sent = test_sentences[i]
-        if args.cuda:
-            sent_ids = sent_ids.cuda()
         if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
             # "module" is necessary when using DataParallel
             hidden = model.module.init_hidden(1) # number of parallel sentences being processed
         else:
             hidden = model.init_hidden(1) # number of parallel sentences being processed
-        # set batch as volatile if adapting
-        data, targets = test_get_batch(sent_ids, evaluation=not args.adapt)
+        data, targets = test_get_batch(sent_ids)
         data=data.unsqueeze(1) # only needed if there is just a single sentence being processed
         output, hidden = model(data, hidden)
         output_flat = output.view(-1, ntokens)
-        curr_loss = criterion(output_flat, targets)
+        loss = criterion(output_flat, targets)
         #curr_loss = len(data) * criterion(output_flat, targets).data # needed if there is more than a single sentence being processed
-        total_loss += curr_loss.data
+        total_loss += loss.item()
         if args.words:
             # output word-level complexity metrics
             get_complexity(output_flat,targets,i)
         else:
             # output sentence-level loss
-            print(str(sent)+":"+str(curr_loss.data[0]))
+            print(str(sent)+":"+str(loss.item()))
 
         if args.adapt:
-            curr_loss.backward()
+            loss.backward()
 
-            # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.             
+            # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
             torch.nn.utils.clip_grad_norm(model.parameters(), args.clip)
             for p in model.parameters():
                 p.data.add_(-lr, p.grad.data)
 
         hidden = repackage_hidden(hidden)
+        
         if PROGRESS:
             bar.next()
     if PROGRESS:
         bar.finish()
-    return total_loss[0] / len(data_source)
+    return total_loss / len(data_source)
 
 def evaluate(data_source):
     # Turn on evaluation mode which disables dropout.
     model.eval()
-    total_loss = 0
+    total_loss = 0.
     ntokens = len(corpus.dictionary)
     if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
         #"module" is necessary when using DataParallel
         hidden = model.module.init_hidden(eval_batch_size)
     else:
         hidden = model.init_hidden(eval_batch_size)
-    for i in range(0, data_source.size(0) - 1, args.bptt):
-        data, targets = get_batch(data_source, i, evaluation=True)
-        output, hidden = model(data, hidden)
-        output_flat = output.view(-1, ntokens)
-        curr_loss = len(data) * criterion(output_flat, targets).data
-        total_loss += curr_loss
-        hidden = repackage_hidden(hidden)
-    return total_loss[0] / len(data_source)
-
+    with torch.no_grad():
+        for i in range(0, data_source.size(0) - 1, args.bptt):
+            data, targets = get_batch(data_source, i)
+            output, hidden = model(data, hidden)
+            output_flat = output.view(-1, ntokens)
+            total_loss += len(data) * criterion(output_flat, targets).item()
+            hidden = repackage_hidden(hidden)
+    return total_loss / len(data_source)
 
 def train():
     # Turn on training mode which enables dropout.
     model.train()
-    total_loss = 0
+    total_loss = 0.
     start_time = time.time()
     ntokens = len(corpus.dictionary)
     if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
@@ -454,16 +428,16 @@ def train():
         for p in model.parameters():
             p.data.add_(-lr, p.grad.data)
 
-        total_loss += loss.data
+        total_loss += loss.item()
 
         if batch % args.log_interval == 0 and batch > 0:
-            cur_loss = total_loss[0] / args.log_interval
+            cur_loss = total_loss / args.log_interval
             elapsed = time.time() - start_time
             print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.2f} | ms/batch {:5.2f} | '
                     'loss {:5.2f} | ppl {:8.2f}'.format(
                 epoch, batch, len(train_data) // args.bptt, lr,
                 elapsed * 1000 / args.log_interval, cur_loss, math.exp(cur_loss)))
-            total_loss = 0
+            total_loss = 0.
             start_time = time.time()
 
 # Loop over epochs.
@@ -487,10 +461,7 @@ if not args.test and not args.interact:
             # Save the model if the validation loss is the best we've seen so far.
             if not best_val_loss or val_loss < best_val_loss:
                 with open(args.model_file, 'wb') as f:
-                    if args.cuda and not args.single:
-                        torch.save(model.module, f)
-                    else:
-                        torch.save(model, f)
+                    torch.save(model, f)
                     best_val_loss = val_loss
             else:
                 # Anneal the learning rate if no improvement has been seen in the validation dataset.
@@ -506,15 +477,11 @@ if not args.test and not args.interact:
 else:
     # Load the best saved model.
     with open(args.model_file, 'rb') as f:
-        if args.cuda:
-            #Run on GPUs
-            model = torch.load(f)
-        else:
-            #Run on CPUs
-            model = torch.load(f, map_location=lambda storage, loc: storage)
+        model = torch.load(f)
+        # after load the rnn params are not a continuous chunk of memory
+        # this makes them a continuous chunk, and will speed up forward pass
+        model.rnn.flatten_parameters()
 
-    if not hasattr(model, 'module'):
-        args.single = True
     # Run on test data.
     if args.interact:
         # First fix Python 2.x input command
