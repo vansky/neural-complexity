@@ -209,7 +209,8 @@ def get_entropy(o):
     # log_softmax is numerically more stable than two separate operations
     logprobs = nn.functional.log_softmax(beam,dim=0)
     prod = probs.data * logprobs.data
-    return torch.Tensor([-1 * torch.sum(prod[prod == prod])]).to(device) # sum but ignore nans
+    # sum but ignore nans
+    return torch.Tensor([-1 * torch.sum(prod[prod == prod])]).to(device)
 
 def get_surps(o):
     # o should be a vector scoring possible classes
@@ -358,7 +359,6 @@ def test_evaluate(test_sentences, data_source):
         output, hidden = model(data, hidden)
         output_flat = output.view(-1, ntokens)
         loss = criterion(output_flat, targets)
-        #curr_loss = len(data) * criterion(output_flat, targets).data # needed if there is more than a single sentence being processed
         total_loss += loss.item()
         if args.words:
             # output word-level complexity metrics
@@ -389,7 +389,7 @@ def evaluate(data_source):
     total_loss = 0.
     ntokens = len(corpus.dictionary)
     if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
-        #"module" is necessary when using DataParallel
+        # "module" is necessary when using DataParallel
         hidden = model.module.init_hidden(eval_batch_size)
     else:
         hidden = model.init_hidden(eval_batch_size)
@@ -490,15 +490,20 @@ else:
 
         # Then run interactively
         print('Running in interactive mode. Ctrl+c to exit')
+        if '<unk>' not in corpus.dictionary.word2idx:
+            print('WARNING: Model does not have unk probabilities.')
         try:
-           while True:
-               instr = input('Input a sentence: ')
-               test_sents, test_data = corpus.online_tokenize_with_unks(instr)
-               test_evaluate(test_sents, test_data)
-
-               if args.adapt:
-                   with open(args.adapted_model, 'wb') as f:
-                       torch.save(model, f)
+            while True:
+                instr = input('Input a sentence: ')
+                test_sents, test_data = corpus.online_tokenize_with_unks(instr)
+                try:
+                    test_evaluate(test_sents, test_data)
+                except:
+                    print("RuntimeError: Most likely one of the input words was out-of-vocabulary.")
+                    print("    Retrain the model with A) explicit '<unk>'s in the training set\n    or B) words in validation that aren't present in training.")
+                if args.adapt:
+                    with open(args.adapted_model, 'wb') as f:
+                        torch.save(model, f)
         except KeyboardInterrupt:
             print(' ')
             pass

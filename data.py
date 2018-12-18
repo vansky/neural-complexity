@@ -39,13 +39,13 @@ class SentenceCorpus(object):
 
     def save_dict(self, path):
         if path[-3:] == 'bin':
-            #this check actually seems to be faster than passing in a binary flag
-            #assume binarized
+            # This check actually seems to be faster than passing in a binary flag
+            # Assume dict is binarized
             import dill
             with open(path, 'wb') as f:
                 torch.save(self.dictionary, f, pickle_module=dill)
         else:
-            #assume plaintext
+            # Assume dict is plaintext
             with open(path, 'w') as f:
                 for word in self.dictionary.idx2word:
                     f.write(word+'\n')
@@ -53,17 +53,17 @@ class SentenceCorpus(object):
     def load_dict(self, path):
         assert os.path.exists(path)
         if path[-3:] == 'bin':
-            #this check actually seems to be faster than passing in a binary flag
-            #assume binarized
+            # This check actually seems to be faster than passing in a binary flag
+            # Assume dict is binarized
             import dill
             with open(path, 'rb') as f:
                 fdata = torch.load(f, pickle_module=dill)
                 if type(fdata) == type(()):
-                    # compatibility with old pytorch LM saving
+                    # Compatibility with old pytorch LM saving
                     self.dictionary = fdata[3]
                 self.dictionary = fdata
         else:
-            #assume plaintext
+            # Assume dict is plaintext
             with open(path, 'r') as f:
                 for line in f:
                     self.dictionary.add_word(line.strip())
@@ -79,7 +79,7 @@ class SentenceCorpus(object):
                 for fchunk in f.readlines():
                     for line in sent_tokenize(fchunk.decode("utf-8")):
                         if line.strip() == '':
-                            #ignore blank lines
+                            # Ignore blank lines
                             continue
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
@@ -98,7 +98,7 @@ class SentenceCorpus(object):
                 for fchunk in f.readlines():
                     for line in sent_tokenize(fchunk.decode("utf-8")):
                         if line.strip() == '':
-                            #ignore blank lines
+                            # Ignore blank lines
                             continue
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
@@ -113,10 +113,9 @@ class SentenceCorpus(object):
                 tokens = 0
                 FIRST = True
                 for fchunk in f:
-                    #print fchunk
                     for line in sent_tokenize(fchunk):
                         if line.strip() == '':
-                            #ignore blank lines
+                            # Ignore blank lines
                             continue
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
@@ -135,7 +134,7 @@ class SentenceCorpus(object):
                 for fchunk in f:
                     for line in sent_tokenize(fchunk):
                         if line.strip() == '':
-                            #ignore blank lines
+                            # Ignore blank lines
                             continue
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
@@ -158,7 +157,7 @@ class SentenceCorpus(object):
                 for fchunk in f.readlines():
                     for line in sent_tokenize(fchunk.decode("utf-8")):
                         if line.strip() == '':
-                            # ignore blank lines
+                            # Ignore blank lines
                             continue
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
@@ -175,7 +174,7 @@ class SentenceCorpus(object):
                 for fchunk in f.readlines():
                     for line in sent_tokenize(fchunk.decode("utf-8")):
                         if line.strip() == '':
-                            # ignore blank lines
+                            # Ignore blank lines
                             continue
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
@@ -183,7 +182,7 @@ class SentenceCorpus(object):
                         else:
                             words = line.split() + ['<eos>']
                         for word in words:
-                            # unk words that are OOV
+                            # Convert OOV to <unk>
                             if word not in self.dictionary.word2idx:
                                 ids[token] = self.dictionary.add_word("<unk>")
                             else:
@@ -197,7 +196,7 @@ class SentenceCorpus(object):
                 for fchunk in f:
                     for line in sent_tokenize(fchunk):
                         if line.strip() == '':
-                            # ignore blank lines
+                            # Ignore blank lines
                             continue
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
@@ -214,7 +213,7 @@ class SentenceCorpus(object):
                 for fchunk in f:
                     for line in sent_tokenize(fchunk):
                         if line.strip() == '':
-                            # ignore blank lines
+                            # Ignore blank lines
                             continue
                         if FIRST:
                             words = ['<eos>'] + line.split() + ['<eos>']
@@ -222,7 +221,7 @@ class SentenceCorpus(object):
                         else:
                             words = line.split() + ['<eos>']
                         for word in words:
-                            # unk words that are OOV
+                            # Convert OOV to <unk>
                             if word not in self.dictionary.word2idx:
                                 ids[token] = self.dictionary.add_word("<unk>")
                             else:
@@ -240,17 +239,17 @@ class SentenceCorpus(object):
                 for fchunk in f.readlines():
                     for line in sent_tokenize(fchunk.decode("utf-8")):
                         if line.strip() == '':
-                            # ignore blank lines
+                            # Ignore blank lines
                             continue
                         sents.append(line.strip())
                         words = ['<eos>'] + line.split() + ['<eos>']
                         tokens = len(words)
 
-                        # tokenize file content
+                        # Tokenize file content
                         ids = torch.LongTensor(tokens)
                         token = 0
                         for word in words:
-                            # unk words that are OOV
+                            # Convert OOV to <unk>
                             if word not in self.dictionary.word2idx:
                                 ids[token] = self.dictionary.add_word("<unk>")
                             else:
@@ -262,17 +261,17 @@ class SentenceCorpus(object):
                 for fchunk in f:
                     for line in sent_tokenize(fchunk):
                         if line.strip() == '':
-                            # ignore blank lines
+                            # Ignore blank lines
                             continue
                         sents.append(line.strip())
                         words = ['<eos>'] + line.split() + ['<eos>']
                         tokens = len(words)
 
-                        # tokenize file content
+                        # Tokenize file content
                         ids = torch.LongTensor(tokens)
                         token = 0
                         for word in words:
-                            # unk words that are OOV
+                            # Convert OOV to <unk>
                             if word not in self.dictionary.word2idx:
                                 ids[token] = self.dictionary.add_word("<unk>")
                             else:
@@ -289,11 +288,11 @@ class SentenceCorpus(object):
         words = ['<eos>'] + line.strip().split() + ['<eos>']
         tokens = len(words)
 
-        # tokenize file content
+        # Tokenize file content
         ids = torch.LongTensor(tokens)
         token = 0
         for word in words:
-            # unk words that are OOV
+            # Convert OOV to <unk>
             if word not in self.dictionary.word2idx:
                 ids[token] = self.dictionary.add_word("<unk>")
             else:
