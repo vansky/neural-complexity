@@ -184,7 +184,6 @@ if not args.test and not args.interact:
         if (not args.single) and (torch.cuda.device_count() > 1):
             # Scatters minibatches (in dim=1) across available GPUs
             model = nn.DataParallel(model,dim=1)
-        model.cuda()
 
 criterion = nn.CrossEntropyLoss()
 
@@ -201,9 +200,9 @@ def get_entropy(o):
         # duplicate o but with all losing guesses set to 0
         beamk,beamix = torch.topk(o,args.complexn,0)
         if args.softcliptopk:
-            beam = torch.FloatTensor(o.size()).fill_(0).scatter(0,beamix,beamk).to(device)
+            beam = torch.FloatTensor(o.size()).to(device).fill_(0).scatter(0,beamix,beamk)
         else:
-            beam = torch.FloatTensor(o.size()).fill_(float("-inf")).scatter(0,beamix,beamk).to(device)
+            beam = torch.FloatTensor(o.size()).to(device).fill_(float("-inf")).scatter(0,beamix,beamk)
 
     probs = nn.functional.softmax(beam,dim=0)
     # log_softmax is numerically more stable than two separate operations
@@ -221,9 +220,9 @@ def get_surps(o):
         # duplicate o but with all losing guesses set to 0
         beamk,beamix = torch.topk(o,args.complexn,0)
         if args.softcliptopk:
-            beam = torch.FloatTensor(o.size()).fill_(0).scatter(0,beamix,beamk).to(device)
+            beam = torch.FloatTensor(o.size()).to(device).fill_(0).scatter(0,beamix,beamk)
         else:
-            beam = torch.FloatTensor(o.size()).fill_(float("-inf")).scatter(0,beamix,beamk).to(device)
+            beam = torch.FloatTensor(o.size()).to(device).fill_(float("-inf")).scatter(0,beamix,beamk)
 
     logprobs = nn.functional.log_softmax(beam,dim=0)
     return -1 * logprobs
@@ -346,7 +345,7 @@ def test_evaluate(test_sentences, data_source):
     if PROGRESS:
         bar = Bar('Processing', max=len(data_source))
     for i in range(len(data_source)):
-        sent_ids = data_source[i]
+        sent_ids = data_source[i].to(device)
         # We predict all words but the first, so determine loss for those
         sent = test_sentences[i]
         if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
