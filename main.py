@@ -315,6 +315,9 @@ def get_batch(source, i):
 
 def test_evaluate(test_sentences, data_source):
     # Turn on evaluation mode which disables dropout.
+    if args.adapt:
+        # Must disable cuDNN in order to backprop during eval
+        torch.backends.cudnn.enabled = False
     model.eval()
     total_loss = 0.
     ntokens = len(corpus.dictionary)
