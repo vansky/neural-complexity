@@ -79,6 +79,8 @@ parser.add_argument('--test', action='store_true',
                     help='test a trained LM')
 parser.add_argument('--single', action='store_true',
                     help='use only a single GPU (even if more are available)')
+parser.add_argument('--view_layer', type=int, default=-1,
+                    help='which layer should output top n guesses')
 
 parser.add_argument('--adapt', action='store_true',
                     help='adapt model weights during evaluation')
@@ -159,8 +161,6 @@ def batchify(data, bsz):
     # Turning the data over to CUDA at this point may lead to more OOM errors
     return data.to(device)
 
-eval_batch_size = 10
-
 corpus = data.SentenceCorpus(args.data_dir, args.vocab_file, args.test, args.interact,
                              trainfname=args.trainfname,
                              validfname=args.validfname,
@@ -171,7 +171,7 @@ if not args.interact:
         test_sents, test_data = corpus.test
     else:
         train_data = batchify(corpus.train, args.batch_size)
-        val_data = batchify(corpus.valid, eval_batch_size)
+        val_data = batchify(corpus.valid, args.batch_size)
 
 ###############################################################################
 # Build/load the model
@@ -321,6 +321,7 @@ def test_evaluate(test_sentences, data_source):
     model.eval()
     total_loss = 0.
     ntokens = len(corpus.dictionary)
+    nwords = 0
     if args.complexn > ntokens or args.complexn <= 0:
         args.complexn = ntokens
         if args.guessn > ntokens:
@@ -357,33 +358,57 @@ def test_evaluate(test_sentences, data_source):
         else:
             hidden = model.init_hidden(1) # number of parallel sentences being processed
         data, targets = test_get_batch(sent_ids)
-        data=data.unsqueeze(1) # only needed if there is just a single sentence being processed
-        output, hidden = model(data, hidden)
-        output_flat = output.view(-1, ntokens)
-        loss = criterion(output_flat, targets)
-        total_loss += loss.item()
-        if args.words:
-            # output word-level complexity metrics
-            get_complexity(output_flat,targets,i)
+        if args.view_layer >= 0:
+            for word_index in range(data.size(0)):
+               # Starting each batch, we detach the hidden state from how it was previously produced.
+               # If we didn't, the model would try backpropagating all the way to start of the dataset.
+               hidden = repackage_hidden(hidden)
+               model.zero_grad()
+   
+               word_input = data[word_index].unsqueeze(0).unsqueeze(1)
+               target = targets[word_index].unsqueeze(0)
+               output, hidden = model(word_input, hidden)
+               output_flat = output.view(-1,ntokens)
+               loss = criterion(output_flat, target)
+               total_loss += loss.item()
+               targ_word = corpus.dictionary.idx2word[int(target.data)]
+               nwords += 1
+               if targ_word != '<eos>':
+                   # don't output <eos> markers to align with input
+                   #print(targ_word)
+                   # output raw activations
+                   print(*list(hidden[0][args.view_layer].view(1,-1).data.cpu().numpy().flatten()), sep=' ')
         else:
-            # output sentence-level loss
-            print(str(sent)+":"+str(loss.item()))
-
-        if args.adapt:
-            loss.backward()
-
-            # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
-            torch.nn.utils.clip_grad_norm(model.parameters(), args.clip)
-            for p in model.parameters():
-                p.data.add_(-lr, p.grad.data)
-
+            data=data.unsqueeze(1) # only needed if there is just a single sentence being processed
+            output, hidden = model(data, hidden)
+            output_flat = output.view(-1, ntokens)
+            loss = criterion(output_flat, targets)
+            total_loss += loss.item()
+            if args.words:
+                # output word-level complexity metrics
+                get_complexity(output_flat,targets,i)
+            else:
+                # output sentence-level loss
+                print(str(sent)+":"+str(loss.item()))
+    
+            if args.adapt:
+                loss.backward()
+    
+                # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
+                torch.nn.utils.clip_grad_norm(model.parameters(), args.clip)
+                for p in model.parameters():
+                    p.data.add_(-lr, p.grad.data)
+    
         hidden = repackage_hidden(hidden)
-        
+            
         if PROGRESS:
             bar.next()
     if PROGRESS:
         bar.finish()
-    return total_loss / len(data_source)
+    if args.view_layer >= 0:
+        return total_loss / nwords
+    else:
+        return total_loss / len(data_source)
 
 def evaluate(data_source):
     # Turn on evaluation mode which disables dropout.
@@ -392,9 +417,9 @@ def evaluate(data_source):
     ntokens = len(corpus.dictionary)
     if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
         # "module" is necessary when using DataParallel
-        hidden = model.module.init_hidden(eval_batch_size)
+        hidden = model.module.init_hidden(args.batch_size)
     else:
-        hidden = model.init_hidden(eval_batch_size)
+        hidden = model.init_hidden(args.batch_size)
     with torch.no_grad():
         for i in range(0, data_source.size(0) - 1, args.bptt):
             data, targets = get_batch(data_source, i)
@@ -479,7 +504,7 @@ if not args.test and not args.interact:
 else:
     # Load the best saved model.
     with open(args.model_file, 'rb') as f:
-        model = torch.load(f)
+        model = torch.load(f).to(device)
         # after load the rnn params are not a continuous chunk of memory
         # this makes them a continuous chunk, and will speed up forward pass
         model.rnn.flatten_parameters()
