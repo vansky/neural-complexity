@@ -89,6 +89,7 @@ These parameters specify runtime options for using the model
     --adapt: If present, adapt model weights during evaluation (default: absent)
              See van Schijndel and Linzen (2018) for details
     --interact: If present, load the model for interactive use (default: absent)  
+    --view_layer [INT]: If 0 or greater, output the chosen hidden layer after each input word (default: -1)  
     
     --words: If present, output word-by-word complexity instead of sentence-level loss (default: absent)
     --log_interval [INT]: Number of batches between log outputs (default: 200)  
