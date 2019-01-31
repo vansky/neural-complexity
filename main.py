@@ -504,7 +504,10 @@ if not args.test and not args.interact:
 else:
     # Load the best saved model.
     with open(args.model_file, 'rb') as f:
-        model = torch.load(f).to(device)
+        if args.cuda:
+            model = torch.load(f).to(device)
+        else:
+            model = torch.load(f,map_location='cpu')
         # after load the rnn params are not a continuous chunk of memory
         # this makes them a continuous chunk, and will speed up forward pass
         model.rnn.flatten_parameters()
