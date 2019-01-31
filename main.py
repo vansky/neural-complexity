@@ -121,6 +121,8 @@ if args.interact:
     # If in interactive mode, force complexity output
     args.words = True
     args.test = True
+    # Don't try to process multiple sentences in parallel interactively
+    args.single = True
 
 # Set the random seed manually for reproducibility.
 torch.manual_seed(args.seed)
@@ -356,7 +358,7 @@ def test_evaluate(test_sentences, data_source):
             # "module" is necessary when using DataParallel
             hidden = model.module.init_hidden(1) # number of parallel sentences being processed
         else:
-            hidden = model.module.init_hidden(1) # number of parallel sentences being processed
+            hidden = model.init_hidden(1) # number of parallel sentences being processed
         data, targets = test_get_batch(sent_ids)
         if args.view_layer >= 0:
             for word_index in range(data.size(0)):
@@ -510,7 +512,10 @@ else:
             model = torch.load(f,map_location='cpu')
         # after load the rnn params are not a continuous chunk of memory
         # this makes them a continuous chunk, and will speed up forward pass
-        model.module.rnn.flatten_parameters()
+        if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
+            model.module.rnn.flatten_parameters()
+        else:
+            model.rnn.flatten_parameters()
 
     # Run on test data.
     if args.interact:
