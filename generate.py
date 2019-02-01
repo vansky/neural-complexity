@@ -61,7 +61,7 @@ corpus = data.SentenceCorpus(args.data_dir, args.vocab_file, True,
                              testfname=args.testfname)
 
 ntokens = len(corpus.dictionary)
-hidden = model.init_hidden(1)
+hidden = model.module.init_hidden(1)
 input = Variable(torch.rand(1, 1).mul(ntokens).long(), volatile=True)
 if args.cuda:
     input.data = input.data.cuda()
