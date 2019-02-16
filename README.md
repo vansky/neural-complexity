@@ -1,7 +1,7 @@
 # Neural complexity
 A neural language model that operates over words (based on the Pytorch word language model example) and has a number of improvements for testing on new data.
 
-In particular, it computes various information-theoretic processing complexity measures (e.g., surprisal) for each word given the preceding context. Also, it can function as an adaptive language model function as an adaptive language model ([van Schijndel and Linzen, 2018](http://aclweb.org/anthology/D18-1499)).
+In particular, it computes various information-theoretic processing complexity measures (e.g., surprisal) for each word given the preceding context. Also, it can function as an adaptive language model ([van Schijndel and Linzen, 2018](http://aclweb.org/anthology/D18-1499)).
 
 ### Dependencies
 Requires the following python packages (available through pip):
