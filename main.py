@@ -79,13 +79,13 @@ parser.add_argument('--test', action='store_true',
                     help='test a trained LM')
 parser.add_argument('--single', action='store_true',
                     help='use only a single GPU (even if more are available)')
-parser.add_argument('--view_layer', type=int, default=-1,
-                    help='which layer should output top n guesses')
 
 parser.add_argument('--adapt', action='store_true',
                     help='adapt model weights during evaluation')
 parser.add_argument('--interact', action='store_true',
                     help='run a trained network interactively')
+parser.add_argument('--view_layer', type=int, default=-1,
+                    help='which layer should output top n guesses')
 
 parser.add_argument('--words', action='store_true',
                     help='evaluate word-level complexities (instead of sentence-level loss)')
@@ -112,6 +112,7 @@ parser.add_argument('--guessprobs', action='store_true',
 parser.add_argument('--complexn', type=int, default=0,
                     help='compute complexity only over top n guesses (0 = all guesses)')
 
+# Misc parameters not in README
 parser.add_argument('--softcliptopk', action="store_true",
                     help='soften non top-k options instead of removing them')
 
