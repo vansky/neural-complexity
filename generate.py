@@ -6,10 +6,7 @@
 ###############################################################################
 
 import argparse
-
 import torch
-from torch.autograd import Variable
-
 import data
 
 parser = argparse.ArgumentParser(description='PyTorch PTB Language Model')
@@ -27,6 +24,8 @@ parser.add_argument('--seed', type=int, default=1111,
                     help='random seed')
 parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
+parser.add_argument('--single', action='store_true',
+                    help='use only a single GPU (even if more are available)')
 parser.add_argument('--temperature', type=float, default=1.0,
                     help='temperature - higher will increase diversity')
 parser.add_argument('--log_interval', type=int, default=100,
@@ -61,8 +60,11 @@ corpus = data.SentenceCorpus(args.data_dir, args.vocab_file, True,
                              testfname=args.testfname)
 
 ntokens = len(corpus.dictionary)
-hidden = model.init_hidden(1)
-input = Variable(torch.rand(1, 1).mul(ntokens).long(), volatile=True)
+if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
+    hidden = model.module.init_hidden(1)
+else:
+    hidden = model.init_hidden(1)
+input = torch.tensor(torch.rand(1, 1).mul(ntokens).long())
 if args.cuda:
     input.data = input.data.cuda()
 
