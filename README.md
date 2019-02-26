@@ -55,7 +55,7 @@ These parameters help specify the model
 
     --model {RNN_TANH, RNN_RELU, LSTM, GRU}: Uses the specified type of model (default: LSTM)  
     --emsize [INT]: The number of dimensions in the word embedding input layer (default: 200)  
-    --nhid [INT]: The number of hidden units in each layer (default: 2)  
+    --nhid [INT]: The number of hidden units in each layer (default: 200)  
     --nlayers [INT]: The number of layers (default: 2)  
     --lr [FLOAT]: The learning rate; gradient is multiplied by this during weight updates (default: 20)  
     --clip [FLOAT]: Clips gradients to dampen large updates (default: 0.25)  
