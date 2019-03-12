@@ -9,7 +9,7 @@ import argparse
 import torch
 import data
 
-parser = argparse.ArgumentParser(description='PyTorch PTB Language Model')
+parser = argparse.ArgumentParser(description='PyTorch Language Model')
 
 # Model parameters.
 parser.add_argument('--data_dir', type=str, default='./data/wikitext-2',
@@ -24,6 +24,8 @@ parser.add_argument('--seed', type=int, default=1111,
                     help='random seed')
 parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
+parser.add_argument('--sentences', action='store_true',
+                    help='generate one sentence per line')
 parser.add_argument('--single', action='store_true',
                     help='use only a single GPU (even if more are available)')
 parser.add_argument('--temperature', type=float, default=1.0,
@@ -32,9 +34,9 @@ parser.add_argument('--log_interval', type=int, default=100,
                     help='reporting interval')
 parser.add_argument('--vocab_file', type=str, default='vocab.txt',
                     help='path to save the LM data')
-parser.add_argument('--testfname', type=str, default='test.txt',
-                    help='name of the test file')
 args = parser.parse_args()
+
+device = torch.device("cuda" if args.cuda else "cpu")
 
 # Set the random seed manually for reproducibility.
 torch.manual_seed(args.seed)
@@ -48,16 +50,19 @@ if args.temperature < 1e-3:
     parser.error("--temperature has to be greater or equal 1e-3")
 
 with open(args.model_file, 'rb') as f:
-    model = torch.load(f)
+    if args.cuda:
+        model = torch.load(f).to(device)
+    else:
+        model = torch.load(f,map_location='cpu')
+    # after load the rnn params are not a continuous chunk of memory
+    # this makes them a continuous chunk, and will speed up forward pass
+    if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
+        model.module.rnn.flatten_parameters()
+    else:
+        model.rnn.flatten_parameters()
 model.eval()
 
-if args.cuda:
-    model.cuda()
-else:
-    model.cpu()
-
-corpus = data.SentenceCorpus(args.data_dir, args.vocab_file, True,
-                             testfname=args.testfname)
+corpus = data.SentenceCorpus(args.data_dir, args.vocab_file, True)
 
 ntokens = len(corpus.dictionary)
 if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
@@ -66,7 +71,7 @@ else:
     hidden = model.init_hidden(1)
 input = torch.tensor(torch.rand(1, 1).mul(ntokens).long())
 if args.cuda:
-    input.data = input.data.cuda()
+    input.data = input.data.to(device)
 
 with open(args.outf, 'w') as outf:
     for i in range(args.numwords):
@@ -76,7 +81,10 @@ with open(args.outf, 'w') as outf:
         input.data.fill_(word_idx)
         word = corpus.dictionary.idx2word[word_idx]
 
-        outf.write(word + ('\n' if i % 20 == 19 else ' '))
+        if args.sentences:
+            outf.write(word + ('\n' if word == '<eos>' else ' '))
+        else:
+            outf.write(word + ('\n' if i % 20 == 19 else ' '))
 
         if i % args.log_interval == 0:
             print('| Generated {}/{} words'.format(i, args.numwords))
