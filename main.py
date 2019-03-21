@@ -57,6 +57,8 @@ parser.add_argument('--seed', type=int, default=1111,
                     help='random seed')
 parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
+parser.add_argument('--init', action='store_true',
+                    help='zero-initialize parameters')
 
 # Data parameters
 parser.add_argument('--model_file', type=str,  default='model.pt',
@@ -517,6 +519,9 @@ else:
             model.module.rnn.flatten_parameters()
         else:
             model.rnn.flatten_parameters()
+
+        if args.init:
+            model.zero_parameters()
 
     # Run on test data.
     if args.interact:

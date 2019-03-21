@@ -42,6 +42,18 @@ class RNNModel(nn.Module):
         self.decoder.bias.data.fill_(0)
         self.decoder.weight.data.uniform_(-initrange, initrange)
 
+    def zero_parameters(self):
+        self.encoder.weight.data.fill_(0)
+        self.decoder.bias.data.fill_(0)
+        self.decoder.weight.data.fill_(0)
+        for weight in self.rnn.parameters():
+            weight.data.fill_(0)
+
+    def random_parameters(self):
+        initrange = 0.1
+        for weight in self.rnn.parameters():
+            weight.data.uniform_(-initrange, initrange)
+
     def forward(self, input, hidden):
         emb = self.drop(self.encoder(input))
         output, hidden = self.rnn(emb, hidden)
