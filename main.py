@@ -246,8 +246,8 @@ def get_guessscores(o):
     return get_guesses(o,True)
 
 def get_complexity(o,t,sentid):
-    Hs = torch.squeeze(apply(get_entropy,o))
-    surps = apply(get_surps,o)
+    Hs = torch.log2(torch.exp(torch.squeeze(apply(get_entropy,o))))
+    surps = torch.log2(torch.exp(apply(get_surps,o)))
 
     if args.guess:
         guesses = apply(get_guesses, o)
