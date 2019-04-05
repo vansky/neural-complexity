@@ -4,7 +4,7 @@ import torch
 class RNNModel(nn.Module):
     """Container module with an encoder, a recurrent module, and a decoder."""
 
-    def __init__(self, rnn_type, ntoken, ninp, nhid, nlayers, dropout=0.5, tie_weights=False):
+    def __init__(self, rnn_type, ntoken, ninp, nhid, nlayers, embedding_file=None, dropout=0.5, tie_weights=False):
         super(RNNModel, self).__init__()
         self.drop = nn.Dropout(dropout)
         self.encoder = nn.Embedding(ntoken, ninp)
@@ -18,6 +18,11 @@ class RNNModel(nn.Module):
                                  options are ['LSTM', 'GRU', 'RNN_TANH' or 'RNN_RELU']""")
             self.rnn = nn.RNN(ninp, nhid, nlayers, nonlinearity=nonlinearity, dropout=dropout)
         self.decoder = nn.Linear(nhid, ntoken)
+        
+        self.init_weights()
+        if embedding_file:
+            # Use pre-trained embeddings
+            self.load_embeddings(embedding_file)
 
         # Optionally tie weights as in:
         # "Using the Output Embedding to Improve Language Models" (Press & Wolf 2016)
@@ -29,9 +34,7 @@ class RNNModel(nn.Module):
             if nhid != ninp:
                 raise ValueError('When using the tied flag, nhid must be equal to emsize')
             self.decoder.weight = self.encoder.weight
-
-        self.init_weights()
-
+        
         self.rnn_type = rnn_type
         self.nhid = nhid
         self.nlayers = nlayers
@@ -53,6 +56,16 @@ class RNNModel(nn.Module):
         initrange = 0.1
         for weight in self.rnn.parameters():
             weight.data.uniform_(-initrange, initrange)
+
+    def load_embeddings(self, embedding_file):
+        # Load pre-trained embeddings into encoder
+        with open(embedding_file, 'r') as f:
+            ctr = 0
+            for line in f:
+                self.encoder.weight[ctr] = torch.tensor(float(w) for w in line.strip().split()[1:])
+                ctr += 1
+        # Don't overwrite the pre-trained embeddings
+        self.encoder.weight.requires_grad = False
 
     def forward(self, input, hidden):
         emb = self.drop(self.encoder(input))

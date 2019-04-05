@@ -69,6 +69,8 @@ parser.add_argument('--data_dir', type=str, default='./data/wikitext-2',
                     help='location of the corpus data')
 parser.add_argument('--vocab_file', type=str, default='vocab.txt',
                     help='path to save the vocab file')
+parser.add_argument('--embedding_file', type=str, default=None,
+                    help='path to pre-trained embeddings')
 parser.add_argument('--trainfname', type=str, default='train.txt',
                     help='name of the training file')
 parser.add_argument('--validfname', type=str, default='valid.txt',
@@ -184,7 +186,7 @@ if not args.interact:
 
 if not args.test and not args.interact:
     ntokens = len(corpus.dictionary)
-    model = model.RNNModel(args.model, ntokens, args.emsize, args.nhid, args.nlayers, args.dropout, args.tied).to(device)
+    model = model.RNNModel(args.model, ntokens, args.emsize, args.nhid, args.nlayers, embedding_file = args.embedding_file, dropout = args.dropout, tie_weights = args.tied).to(device)
     if args.cuda:
         if (not args.single) and (torch.cuda.device_count() > 1):
             # Scatters minibatches (in dim=1) across available GPUs
