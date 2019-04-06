@@ -98,6 +98,8 @@ parser.add_argument('--words', action='store_true',
 parser.add_argument('--log_interval', type=int, default=200, metavar='N',
                     help='report interval')
 
+parser.add_argument('--lowercase', action='store_true',
+                    help='force all input to be lowercase')
 parser.add_argument('--nopp', action='store_true',
                     help='suppress evaluation perplexity output')
 parser.add_argument('--nocheader', action='store_true',
@@ -177,6 +179,7 @@ def batchify(data, bsz):
 corpus = data.SentenceCorpus(args.data_dir, args.vocab_file, args.test, args.interact,
                              checkpoint_flag=args.load_checkpoint,
                              embedding_flag=args.embedding_file,
+                             lower_flag=args.lowercase,
                              trainfname=args.trainfname,
                              validfname=args.validfname,
                              testfname=args.testfname)

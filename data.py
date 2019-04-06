@@ -25,11 +25,12 @@ class Dictionary(object):
 class SentenceCorpus(object):
     """ Loads train/dev/test corpora and dictionary """
     def __init__(self, path, vocab_file, test_flag=False, interact_flag=False,
-                 checkpoint_flag=False, embedding_flag=False,
+                 checkpoint_flag=False, embedding_flag=False, lower_flag=False,
                  trainfname='train.txt',
                  validfname='valid.txt',
                  testfname='test.txt'):
-        if not (test_flag or checkpoint_flag or embedding_flag):
+        self.lower = lower_flag
+        if not (test_flag or interact_flag or checkpoint_flag or embedding_flag):
             # training mode
             self.dictionary = Dictionary()
             self.train = self.tokenize(os.path.join(path, trainfname))
@@ -42,11 +43,11 @@ class SentenceCorpus(object):
             else:
                 self.dictionary = Dictionary()
                 self.load_dict(vocab_file)
-            if checkpoint_flag:
+            if checkpoint_flag or embedding_flag:
                 # load from a checkpoint
                 self.train = self.tokenize_with_unks(os.path.join(path, trainfname))
                 self.valid = self.tokenize_with_unks(os.path.join(path, validfname))
-            elif not interact_flag:
+            elif test_flag:
                 # test mode
                 self.test = self.sent_tokenize_with_unks(os.path.join(path, testfname))
 
@@ -102,8 +103,12 @@ class SentenceCorpus(object):
                         else:
                             words = line.split() + ['<eos>']
                         tokens += len(words)
-                        for word in words:
-                            self.dictionary.add_word(word)
+                        if self.lower:
+                            for word in words:
+                                self.dictionary.add_word(word.lower())
+                        else:
+                            for word in words:
+                                self.dictionary.add_word(word)
 
             # Tokenize file content
             with gzip.open(path, 'rb') as f:
@@ -120,9 +125,14 @@ class SentenceCorpus(object):
                             FIRST = False
                         else:
                             words = line.split() + ['<eos>']
-                        for word in words:
-                            ids[token] = self.dictionary.word2idx[word]
-                            token += 1
+                        if self.lower:
+                            for word in words:
+                                ids[token] = self.dictionary.word2idx[word.lower()]
+                                token += 1
+                        else:
+                            for word in words:
+                                ids[token] = self.dictionary.word2idx[word]
+                                token += 1
         else:
             with open(path, 'r') as f:
                 tokens = 0
@@ -138,8 +148,12 @@ class SentenceCorpus(object):
                         else:
                             words = line.split() + ['<eos>']
                         tokens += len(words)
-                        for word in words:
-                            self.dictionary.add_word(word)
+                        if self.lower:
+                            for word in words:
+                                self.dictionary.add_word(word.lower())
+                        else:
+                            for word in words:
+                                self.dictionary.add_word(word)
 
             # Tokenize file content
             with open(path, 'r') as f:
@@ -156,9 +170,14 @@ class SentenceCorpus(object):
                             FIRST = False
                         else:
                             words = line.split() + ['<eos>']
-                        for word in words:
-                            ids[token] = self.dictionary.word2idx[word]
-                            token += 1
+                        if self.lower:
+                            for word in words:
+                                ids[token] = self.dictionary.word2idx[word.lower()]
+                                token += 1
+                        else:
+                            for word in words:
+                                ids[token] = self.dictionary.word2idx[word]
+                                token += 1
         return ids
 
     def tokenize_with_unks(self, path):
@@ -196,13 +215,22 @@ class SentenceCorpus(object):
                             FIRST = False
                         else:
                             words = line.split() + ['<eos>']
-                        for word in words:
-                            # Convert OOV to <unk>
-                            if word not in self.dictionary.word2idx:
-                                ids[token] = self.dictionary.add_word("<unk>")
-                            else:
-                                ids[token] = self.dictionary.word2idx[word]
-                            token += 1
+                        if self.lower:
+                            for word in words:
+                                # Convert OOV to <unk>
+                                if word.lower() not in self.dictionary.word2idx:
+                                    ids[token] = self.dictionary.add_word("<unk>")
+                                else:
+                                    ids[token] = self.dictionary.word2idx[word.lower()]
+                                token += 1
+                        else:
+                            for word in words:
+                                # Convert OOV to <unk>
+                                if word not in self.dictionary.word2idx:
+                                    ids[token] = self.dictionary.add_word("<unk>")
+                                else:
+                                    ids[token] = self.dictionary.word2idx[word]
+                                token += 1
         else:
             # Determine the length of the corpus
             with open(path, 'r') as f:
@@ -235,13 +263,22 @@ class SentenceCorpus(object):
                             FIRST = False
                         else:
                             words = line.split() + ['<eos>']
-                        for word in words:
-                            # Convert OOV to <unk>
-                            if word not in self.dictionary.word2idx:
-                                ids[token] = self.dictionary.add_word("<unk>")
-                            else:
-                                ids[token] = self.dictionary.word2idx[word]
-                            token += 1
+                        if self.lower:
+                            for word in words:
+                                # Convert OOV to <unk>
+                                if word.lower() not in self.dictionary.word2idx:
+                                    ids[token] = self.dictionary.add_word("<unk>")
+                                else:
+                                    ids[token] = self.dictionary.word2idx[word.lower()]
+                                token += 1
+                        else:
+                            for word in words:
+                                # Convert OOV to <unk>
+                                if word not in self.dictionary.word2idx:
+                                    ids[token] = self.dictionary.add_word("<unk>")
+                                else:
+                                    ids[token] = self.dictionary.word2idx[word]
+                                token += 1    
         return ids
 
     def sent_tokenize_with_unks(self, path):
@@ -263,13 +300,22 @@ class SentenceCorpus(object):
                         # Tokenize file content
                         ids = torch.LongTensor(tokens)
                         token = 0
-                        for word in words:
-                            # Convert OOV to <unk>
-                            if word not in self.dictionary.word2idx:
-                                ids[token] = self.dictionary.add_word("<unk>")
-                            else:
-                                ids[token] = self.dictionary.word2idx[word]
-                            token += 1
+                        if self.lower:
+                            for word in words:
+                                # Convert OOV to <unk>
+                                if word.lower() not in self.dictionary.word2idx:
+                                    ids[token] = self.dictionary.add_word("<unk>")
+                                else:
+                                    ids[token] = self.dictionary.word2idx[word.lower()]
+                                token += 1
+                        else:
+                            for word in words:
+                                # Convert OOV to <unk>
+                                if word not in self.dictionary.word2idx:
+                                    ids[token] = self.dictionary.add_word("<unk>")
+                                else:
+                                    ids[token] = self.dictionary.word2idx[word]
+                                token += 1
                         all_ids.append(ids)
         else:
             with open(path, 'r') as f:
@@ -285,13 +331,22 @@ class SentenceCorpus(object):
                         # Tokenize file content
                         ids = torch.LongTensor(tokens)
                         token = 0
-                        for word in words:
-                            # Convert OOV to <unk>
-                            if word not in self.dictionary.word2idx:
-                                ids[token] = self.dictionary.add_word("<unk>")
-                            else:
-                                ids[token] = self.dictionary.word2idx[word]
-                            token += 1
+                        if self.lower:
+                            for word in words:
+                                # Convert OOV to <unk>
+                                if word.lower() not in self.dictionary.word2idx:
+                                    ids[token] = self.dictionary.add_word("<unk>")
+                                else:
+                                    ids[token] = self.dictionary.word2idx[word.lower()]
+                                token += 1
+                        else:
+                            for word in words:
+                                # Convert OOV to <unk>
+                                if word not in self.dictionary.word2idx:
+                                    ids[token] = self.dictionary.add_word("<unk>")
+                                else:
+                                    ids[token] = self.dictionary.word2idx[word]
+                                token += 1
                         all_ids.append(ids)
         return (sents, all_ids)
 
@@ -306,12 +361,21 @@ class SentenceCorpus(object):
         # Tokenize file content
         ids = torch.LongTensor(tokens)
         token = 0
-        for word in words:
-            # Convert OOV to <unk>
-            if word not in self.dictionary.word2idx:
-                ids[token] = self.dictionary.add_word("<unk>")
-            else:
-                ids[token] = self.dictionary.word2idx[word]
-            token += 1
+        if self.lower:
+            for word in words:
+                # Convert OOV to <unk>
+                if word.lower() not in self.dictionary.word2idx:
+                    ids[token] = self.dictionary.add_word("<unk>")
+                else:
+                    ids[token] = self.dictionary.word2idx[word.lower()]
+                token += 1
+        else:
+            for word in words:
+                # Convert OOV to <unk>
+                if word not in self.dictionary.word2idx:
+                    ids[token] = self.dictionary.add_word("<unk>")
+                else:
+                    ids[token] = self.dictionary.word2idx[word]
+                token += 1
         all_ids.append(ids)
         return (sents, all_ids)
