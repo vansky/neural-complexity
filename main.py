@@ -175,7 +175,8 @@ def batchify(data, bsz):
     return data.to(device)
 
 corpus = data.SentenceCorpus(args.data_dir, args.vocab_file, args.test, args.interact,
-                             checkpointflag=args.load_checkpoint,
+                             checkpoint_flag=args.load_checkpoint,
+                             embedding_flag=args.embedding_file,
                              trainfname=args.trainfname,
                              validfname=args.validfname,
                              testfname=args.testfname)

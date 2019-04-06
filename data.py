@@ -24,12 +24,12 @@ class Dictionary(object):
 
 class SentenceCorpus(object):
     """ Loads train/dev/test corpora and dictionary """
-    def __init__(self, path, vocab_file, testflag=False, interactflag=False,
-                 checkpointflag=False,
+    def __init__(self, path, vocab_file, test_flag=False, interact_flag=False,
+                 checkpoint_flag=False, embedding_flag=False,
                  trainfname='train.txt',
                  validfname='valid.txt',
                  testfname='test.txt'):
-        if not testflag and not checkpointflag:
+        if not (test_flag or checkpoint_flag or embedding_flag):
             # training mode
             self.dictionary = Dictionary()
             self.train = self.tokenize(os.path.join(path, trainfname))
@@ -42,11 +42,11 @@ class SentenceCorpus(object):
             else:
                 self.dictionary = Dictionary()
                 self.load_dict(vocab_file)
-            if checkpointflag:
+            if checkpoint_flag:
                 # load from a checkpoint
                 self.train = self.tokenize_with_unks(os.path.join(path, trainfname))
                 self.valid = self.tokenize_with_unks(os.path.join(path, validfname))
-            elif not interactflag:
+            elif not interact_flag:
                 # test mode
                 self.test = self.sent_tokenize_with_unks(os.path.join(path, testfname))
 
@@ -84,7 +84,7 @@ class SentenceCorpus(object):
                     self.dictionary.add_word(line.strip())
 
     def tokenize(self, path):
-        """Tokenizes a text file."""
+        """ Tokenizes a text file. """
         assert os.path.exists(path)
         # Add words to the dictionary
         if path[-2:] == 'gz':
@@ -162,7 +162,7 @@ class SentenceCorpus(object):
         return ids
 
     def tokenize_with_unks(self, path):
-        """Tokenizes a text file, adding unks if needed."""
+        """ Tokenizes a text file, adding unks if needed. """
         assert os.path.exists(path)
         if path[-2:] == 'gz':
             # Determine the length of the corpus
@@ -245,7 +245,7 @@ class SentenceCorpus(object):
         return ids
 
     def sent_tokenize_with_unks(self, path):
-        """Tokenizes a text file into sentences, adding unks if needed."""
+        """ Tokenizes a text file into sentences, adding unks if needed. """
         assert os.path.exists(path)
         all_ids = []
         sents = []
@@ -296,7 +296,7 @@ class SentenceCorpus(object):
         return (sents, all_ids)
 
     def online_tokenize_with_unks(self, line):
-        """Tokenizes an input sentence, adding unks if needed."""
+        """ Tokenizes an input sentence, adding unks if needed. """
         all_ids = []
         sents = [line.strip()]
 
