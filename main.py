@@ -7,7 +7,6 @@ import torch.nn as nn
 import data
 import model
 import sys
-import numpy as np
 import warnings
 
 try:
@@ -58,16 +57,20 @@ parser.add_argument('--seed', type=int, default=1111,
                     help='random seed')
 parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
+parser.add_argument('--init', action='store_true',
+                    help='zero-initialize parameters')
 
 # Data parameters
-parser.add_argument('--model_file', type=str,  default='model.pt',
+parser.add_argument('--model_file', type=str, default='model.pt',
                     help='path to save the final model')
-parser.add_argument('--adapted_model', type=str,  default='adaptedmodel.pt',
+parser.add_argument('--adapted_model', type=str, default='adaptedmodel.pt',
                     help='new path to save the final adapted model')
 parser.add_argument('--data_dir', type=str, default='./data/wikitext-2',
                     help='location of the corpus data')
 parser.add_argument('--vocab_file', type=str, default='vocab.txt',
                     help='path to save the vocab file')
+parser.add_argument('--embedding_file', type=str, default=None,
+                    help='path to pre-trained embeddings')
 parser.add_argument('--trainfname', type=str, default='train.txt',
                     help='name of the training file')
 parser.add_argument('--validfname', type=str, default='valid.txt',
@@ -205,11 +208,13 @@ if not args.test and not args.interact:
                 model.rnn.flatten_parameters()
     else:
         ntokens = len(corpus.dictionary)
-        model = model.RNNModel(args.model, ntokens, args.emsize, args.nhid, args.nlayers, args.dropout, args.tied).to(device)
+        model = model.RNNModel(args.model, ntokens, args.emsize, args.nhid,
+                               args.nlayers, embedding_file=args.embedding_file,
+                               dropout=args.dropout, tie_weights=args.tied).to(device)
     if args.cuda:
         if (not args.single) and (torch.cuda.device_count() > 1):
             # Scatters minibatches (in dim=1) across available GPUs
-            model = nn.DataParallel(model,dim=1)
+            model = nn.DataParallel(model, dim=1)
 
 criterion = nn.CrossEntropyLoss()
 
@@ -224,15 +229,15 @@ def get_entropy(o):
         beam = o
     else:
         # duplicate o but with all losing guesses set to 0
-        beamk,beamix = torch.topk(o,args.complexn,0)
+        beamk, beamix = torch.topk(o, args.complexn, 0)
         if args.softcliptopk:
-            beam = torch.FloatTensor(o.size()).to(device).fill_(0).scatter(0,beamix,beamk)
+            beam = torch.FloatTensor(o.size()).to(device).fill_(0).scatter(0, beamix, beamk)
         else:
-            beam = torch.FloatTensor(o.size()).to(device).fill_(float("-inf")).scatter(0,beamix,beamk)
+            beam = torch.FloatTensor(o.size()).to(device).fill_(float("-inf")).scatter(0, beamix, beamk)
 
-    probs = nn.functional.softmax(beam,dim=0)
+    probs = nn.functional.softmax(beam, dim=0)
     # log_softmax is numerically more stable than two separate operations
-    logprobs = nn.functional.log_softmax(beam,dim=0)
+    logprobs = nn.functional.log_softmax(beam, dim=0)
     prod = probs.data * logprobs.data
     # sum but ignore nans
     return torch.Tensor([-1 * torch.sum(prod[prod == prod])]).to(device)
@@ -244,18 +249,18 @@ def get_surps(o):
         beam = o
     else:
         # duplicate o but with all losing guesses set to 0
-        beamk,beamix = torch.topk(o,args.complexn,0)
+        beamk, beamix = torch.topk(o, args.complexn, 0)
         if args.softcliptopk:
-            beam = torch.FloatTensor(o.size()).to(device).fill_(0).scatter(0,beamix,beamk)
+            beam = torch.FloatTensor(o.size()).to(device).fill_(0).scatter(0, beamix, beamk)
         else:
-            beam = torch.FloatTensor(o.size()).to(device).fill_(float("-inf")).scatter(0,beamix,beamk)
+            beam = torch.FloatTensor(o.size()).to(device).fill_(float("-inf")).scatter(0, beamix, beamk)
 
-    logprobs = nn.functional.log_softmax(beam,dim=0)
+    logprobs = nn.functional.log_softmax(beam, dim=0)
     return -1 * logprobs
 
-def get_guesses(o,scores=False):
+def get_guesses(o, scores=False):
     # o should be a vector scoring possible classes
-    guessvals, guessixes = torch.topk(o,args.guessn,0)
+    guessvals, guessixes = torch.topk(o, args.guessn, 0)
     # guessvals are the scores of each input cell
     # guessixes are the indices of the max cells
     if scores:
@@ -264,17 +269,17 @@ def get_guesses(o,scores=False):
         return guessixes
 
 def get_guessscores(o):
-    return get_guesses(o,True)
+    return get_guesses(o, True)
 
-def get_complexity(o,t,sentid):
-    Hs = torch.squeeze(apply(get_entropy,o))
-    surps = apply(get_surps,o)
+def get_complexity(o, t, sentid):
+    Hs = torch.log2(torch.exp(torch.squeeze(apply(get_entropy, o))))
+    surps = torch.log2(torch.exp(apply(get_surps, o)))
 
     if args.guess:
         guesses = apply(get_guesses, o)
         guessscores = apply(get_guessscores, o)
 
-    for corpuspos,targ in enumerate(t):
+    for corpuspos, targ in enumerate(t):
         word = corpus.dictionary.idx2word[int(targ)]
         if word == '<eos>':
             # don't output the complexity of EOS
@@ -291,18 +296,23 @@ def get_complexity(o,t,sentid):
                     # output scores (ratio of score(x)/score(best guess)
                     outputguesses.append("{:.3f}".format(float(guessscores[corpuspos][g])/float(guessscores[corpuspos][0])))
                 elif args.guessprobs:
-                  # output probabilities
-                  # Currently normalizes probs over N-best list;
-                  # ideally it'd normalize to probs before getting the N-best
-                  outputguesses.append("{:.3f}".format(math.exp(float(nn.functional.log_softmax(guessscores[corpuspos],dim=0)[g]))))
+                    # output probabilities
+                    # Currently normalizes probs over N-best list;
+                    # ideally it'd normalize to probs before getting the N-best
+                    outputguesses.append("{:.3f}".format(math.exp(float(nn.functional.log_softmax(guessscores[corpuspos], dim=0)[g]))))
             outputguesses = args.csep.join(outputguesses)
-            print(args.csep.join([str(word),str(sentid),str(corpuspos),str(len(word)),str(float(surp)),str(float(Hs[corpuspos])),str(max(0,float(Hs[max(corpuspos-1,0)])-float(Hs[corpuspos]))),str(outputguesses)]))
+            print(args.csep.join([str(word), str(sentid), str(corpuspos), str(len(word)),
+                                  str(float(surp)), str(float(Hs[corpuspos])),
+                                  str(max(0, float(Hs[max(corpuspos-1, 0)])-float(Hs[corpuspos]))),
+                                  str(outputguesses)]))
         else:
-            print(args.csep.join([str(word),str(sentid),str(corpuspos),str(len(word)),str(float(surp)),str(float(Hs[corpuspos])),str(max(0,float(Hs[max(corpuspos-1,0)])-float(Hs[corpuspos])))]))
+            print(args.csep.join([str(word), str(sentid), str(corpuspos), str(len(word)),
+                                  str(float(surp)), str(float(Hs[corpuspos])),
+                                  str(max(0, float(Hs[max(corpuspos-1, 0)])-float(Hs[corpuspos])))]))
 
 def apply(func, M):
     # applies a function along a given dimension
-    tList = [func(m) for m in torch.unbind(M, dim=0) ]
+    tList = [func(m) for m in torch.unbind(M, dim=0)]
     res = torch.stack(tList, dim=0)
     return res
 
@@ -361,7 +371,7 @@ def test_evaluate(test_sentences, data_source):
             if args.complexn == ntokens:
                 print('word{0}sentid{0}sentpos{0}wlen{0}surp{0}entropy{0}entred'.format(args.csep), end='')
             else:
-                print('word{0}sentid{0}sentpos{0}wlen{0}surp{1}{0}entropy{1}{0}entred{1}'.format(args.csep,args.complexn), end='')
+                print('word{0}sentid{0}sentpos{0}wlen{0}surp{1}{0}entropy{1}{0}entred{1}'.format(args.csep, args.complexn), end='')
             if args.guess:
                 for i in range(args.guessn):
                     print('{0}guess'.format(args.csep)+str(i), end='')
@@ -386,47 +396,47 @@ def test_evaluate(test_sentences, data_source):
         data, targets = test_get_batch(sent_ids)
         if args.view_layer >= 0:
             for word_index in range(data.size(0)):
-               # Starting each batch, we detach the hidden state from how it was previously produced.
-               # If we didn't, the model would try backpropagating all the way to start of the dataset.
-               hidden = repackage_hidden(hidden)
-               model.zero_grad()
-   
-               word_input = data[word_index].unsqueeze(0).unsqueeze(1)
-               target = targets[word_index].unsqueeze(0)
-               output, hidden = model(word_input, hidden)
-               output_flat = output.view(-1,ntokens)
-               loss = criterion(output_flat, target)
-               total_loss += loss.item()
-               targ_word = corpus.dictionary.idx2word[int(target.data)]
-               nwords += 1
-               if targ_word != '<eos>':
-                   # don't output <eos> markers to align with input
-                   #print(targ_word)
-                   # output raw activations
-                   print(*list(hidden[0][args.view_layer].view(1,-1).data.cpu().numpy().flatten()), sep=' ')
+                # Starting each batch, we detach the hidden state from how it was previously produced.
+                # If we didn't, the model would try backpropagating all the way to start of the dataset.
+                hidden = repackage_hidden(hidden)
+                model.zero_grad()
+
+                word_input = data[word_index].unsqueeze(0).unsqueeze(1)
+                target = targets[word_index].unsqueeze(0)
+                output, hidden = model(word_input, hidden)
+                output_flat = output.view(-1, ntokens)
+                loss = criterion(output_flat, target)
+                total_loss += loss.item()
+                targ_word = corpus.dictionary.idx2word[int(target.data)]
+                nwords += 1
+                if targ_word != '<eos>':
+                    # don't output <eos> markers to align with input
+                    #print(targ_word)
+                    # output raw activations
+                    print(*list(hidden[0][args.view_layer].view(1, -1).data.cpu().numpy().flatten()), sep=' ')
         else:
-            data=data.unsqueeze(1) # only needed if there is just a single sentence being processed
+            data = data.unsqueeze(1) # only needed if there is just a single sentence being processed
             output, hidden = model(data, hidden)
             output_flat = output.view(-1, ntokens)
             loss = criterion(output_flat, targets)
             total_loss += loss.item()
             if args.words:
                 # output word-level complexity metrics
-                get_complexity(output_flat,targets,i)
+                get_complexity(output_flat, targets, i)
             else:
                 # output sentence-level loss
                 print(str(sent)+":"+str(loss.item()))
-    
+
             if args.adapt:
                 loss.backward()
-    
+
                 # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
                 torch.nn.utils.clip_grad_norm(model.parameters(), args.clip)
                 for p in model.parameters():
                     p.data.add_(-lr, p.grad.data)
-    
+
         hidden = repackage_hidden(hidden)
-            
+
         if PROGRESS:
             bar.next()
     if PROGRESS:
@@ -487,9 +497,9 @@ def train():
             cur_loss = total_loss / args.log_interval
             elapsed = time.time() - start_time
             print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.2f} | ms/batch {:5.2f} | '
-                    'loss {:5.2f} | ppl {:8.2f}'.format(
-                epoch, batch, len(train_data) // args.bptt, lr,
-                elapsed * 1000 / args.log_interval, cur_loss, math.exp(cur_loss)))
+                  'loss {:5.2f} | ppl {:8.2f}'.format(
+                        epoch, batch, len(train_data) // args.bptt, lr,
+                        elapsed * 1000 / args.log_interval, cur_loss, math.exp(cur_loss)))
             total_loss = 0.
             start_time = time.time()
 
@@ -533,13 +543,16 @@ else:
         if args.cuda:
             model = torch.load(f).to(device)
         else:
-            model = torch.load(f,map_location='cpu')
+            model = torch.load(f, map_location='cpu')
         # after load the rnn params are not a continuous chunk of memory
         # this makes them a continuous chunk, and will speed up forward pass
         if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
             model.module.rnn.flatten_parameters()
         else:
             model.rnn.flatten_parameters()
+
+        if args.init:
+            model.zero_parameters()
 
     # Run on test data.
     if args.interact:
@@ -565,7 +578,6 @@ else:
                         torch.save(model, f)
         except KeyboardInterrupt:
             print(' ')
-            pass
     else:
         test_loss = test_evaluate(test_sents, test_data)
         if args.adapt:

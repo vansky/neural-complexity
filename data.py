@@ -1,15 +1,19 @@
+""" Module for handling data files """
+
+import gzip
 import os
 import torch
-import gzip
 
 from nltk import sent_tokenize
 
 class Dictionary(object):
+    """ Maps between observations and indices """
     def __init__(self):
         self.word2idx = {}
         self.idx2word = []
 
     def add_word(self, word):
+        """ Adds a new obs to the dictionary if needed """
         if word not in self.word2idx:
             self.idx2word.append(word)
             self.word2idx[word] = len(self.idx2word) - 1
@@ -19,6 +23,7 @@ class Dictionary(object):
         return len(self.idx2word)
 
 class SentenceCorpus(object):
+    """ Loads train/dev/test corpora and dictionary """
     def __init__(self, path, vocab_file, testflag=False, interactflag=False,
                  checkpointflag=False,
                  trainfname='train.txt',
@@ -29,7 +34,7 @@ class SentenceCorpus(object):
             self.dictionary = Dictionary()
             self.train = self.tokenize(os.path.join(path, trainfname))
             self.valid = self.tokenize_with_unks(os.path.join(path, validfname))
-            self.vocab_file = self.save_dict(vocab_file)
+            self.save_dict(vocab_file)
         else:
             # load pretrained model
             if vocab_file[-3:] == 'bin':
@@ -46,6 +51,7 @@ class SentenceCorpus(object):
                 self.test = self.sent_tokenize_with_unks(os.path.join(path, testfname))
 
     def save_dict(self, path):
+        """ Saves dictionary to disk """
         if path[-3:] == 'bin':
             # This check actually seems to be faster than passing in a binary flag
             # Assume dict is binarized
@@ -59,6 +65,7 @@ class SentenceCorpus(object):
                     f.write(word+'\n')
 
     def load_dict(self, path):
+        """ Loads dictionary from disk """
         assert os.path.exists(path)
         if path[-3:] == 'bin':
             # This check actually seems to be faster than passing in a binary flag
@@ -66,7 +73,7 @@ class SentenceCorpus(object):
             import dill
             with open(path, 'rb') as f:
                 fdata = torch.load(f, pickle_module=dill)
-                if type(fdata) == type(()):
+                if isinstance(fdata, tuple):
                     # Compatibility with old pytorch LM saving
                     self.dictionary = fdata[3]
                 self.dictionary = fdata
@@ -242,7 +249,7 @@ class SentenceCorpus(object):
         assert os.path.exists(path)
         all_ids = []
         sents = []
-        if path [-2:] == 'gz':
+        if path[-2:] == 'gz':
             with gzip.open(path, 'rb') as f:
                 for fchunk in f.readlines():
                     for line in sent_tokenize(fchunk.decode("utf-8")):
