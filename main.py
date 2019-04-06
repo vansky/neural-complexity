@@ -32,7 +32,8 @@ parser = argparse.ArgumentParser(description='PyTorch RNN/LSTM Language Model')
 
 # Model parameters
 parser.add_argument('--model', type=str, default='LSTM',
-                    help='type of recurrent net (RNN_TANH, RNN_RELU, LSTM, GRU)')
+                    choices=['RNN_TANH','RNN_RELU','LSTM','GRU'],
+                    help='type of recurrent net')
 parser.add_argument('--emsize', type=int, default=200,
                     help='size of word embeddings')
 parser.add_argument('--nhid', type=int, default=200,
@@ -77,6 +78,8 @@ parser.add_argument('--testfname', type=str, default='test.txt',
 # Runtime parameters
 parser.add_argument('--test', action='store_true',
                     help='test a trained LM')
+parser.add_argument('--load_checkpoint', action='store_true',
+                    help='continue training a pre-trained LM')
 parser.add_argument('--single', action='store_true',
                     help='use only a single GPU (even if more are available)')
 
@@ -125,6 +128,10 @@ if args.interact:
     # Don't try to process multiple sentences in parallel interactively
     args.single = True
 
+if args.adapt:
+    # If adapting, we must be in test mode
+    args.test = True
+
 # Set the random seed manually for reproducibility.
 torch.manual_seed(args.seed)
 if torch.cuda.is_available():
@@ -165,6 +172,7 @@ def batchify(data, bsz):
     return data.to(device)
 
 corpus = data.SentenceCorpus(args.data_dir, args.vocab_file, args.test, args.interact,
+                             checkpointflag=args.load_checkpoint,
                              trainfname=args.trainfname,
                              validfname=args.validfname,
                              testfname=args.testfname)
@@ -181,8 +189,23 @@ if not args.interact:
 ###############################################################################
 
 if not args.test and not args.interact:
-    ntokens = len(corpus.dictionary)
-    model = model.RNNModel(args.model, ntokens, args.emsize, args.nhid, args.nlayers, args.dropout, args.tied).to(device)
+    if args.load_checkpoint:
+        # Load the best saved model.
+        print('  Continuing training from previous checkpoint')
+        with open(args.model_file, 'rb') as f:
+            if args.cuda:
+                model = torch.load(f).to(device)
+            else:
+                model = torch.load(f,map_location='cpu')
+            # after load the rnn params are not a continuous chunk of memory
+            # this makes them a continuous chunk, and will speed up forward pass
+            if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
+                model.module.rnn.flatten_parameters()
+            else:
+                model.rnn.flatten_parameters()
+    else:
+        ntokens = len(corpus.dictionary)
+        model = model.RNNModel(args.model, ntokens, args.emsize, args.nhid, args.nlayers, args.dropout, args.tied).to(device)
     if args.cuda:
         if (not args.single) and (torch.cuda.device_count() > 1):
             # Scatters minibatches (in dim=1) across available GPUs

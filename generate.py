@@ -88,3 +88,15 @@ with open(args.outf, 'w') as outf:
 
         if i % args.log_interval == 0:
             print('| Generated {}/{} words'.format(i, args.numwords))
+    if args.sentences:
+        while word != '<eos>':
+            output, hidden = model(input, hidden)
+            word_weights = output.squeeze().data.div(args.temperature).exp().cpu()
+            word_idx = torch.multinomial(word_weights, 1)[0]
+            input.data.fill_(word_idx)
+            word = corpus.dictionary.idx2word[word_idx]
+    
+            if args.sentences:
+                outf.write(word + ('\n' if word == '<eos>' else ' '))
+            else:
+                outf.write(word + ('\n' if i % 20 == 19 else ' '))

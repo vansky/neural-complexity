@@ -20,21 +20,29 @@ class Dictionary(object):
 
 class SentenceCorpus(object):
     def __init__(self, path, vocab_file, testflag=False, interactflag=False,
+                 checkpointflag=False,
                  trainfname='train.txt',
                  validfname='valid.txt',
                  testfname='test.txt'):
-        if not testflag:
+        if not testflag and not checkpointflag:
+            # training mode
             self.dictionary = Dictionary()
             self.train = self.tokenize(os.path.join(path, trainfname))
             self.valid = self.tokenize_with_unks(os.path.join(path, validfname))
             self.vocab_file = self.save_dict(vocab_file)
         else:
+            # load pretrained model
             if vocab_file[-3:] == 'bin':
                 self.load_dict(vocab_file)
             else:
                 self.dictionary = Dictionary()
                 self.load_dict(vocab_file)
-            if not interactflag:
+            if checkpointflag:
+                # load from a checkpoint
+                self.train = self.tokenize_with_unks(os.path.join(path, trainfname))
+                self.valid = self.tokenize_with_unks(os.path.join(path, validfname))
+            elif not interactflag:
+                # test mode
                 self.test = self.sent_tokenize_with_unks(os.path.join(path, testfname))
 
     def save_dict(self, path):
