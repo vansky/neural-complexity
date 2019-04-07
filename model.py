@@ -73,7 +73,7 @@ class RNNModel(nn.Module):
         with open(embedding_file, 'r') as in_file:
             ctr = 0
             for line in in_file:
-                weights[ctr,:] = np.array([float(w) for w in line.strip().split()[1:]])
+                weights[ctr, :] = np.array([float(w) for w in line.strip().split()[1:]])
                 ctr += 1
         return(torch.tensor(weights).float())
 

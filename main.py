@@ -1,18 +1,23 @@
+'''
+Code for training and evaluating a neural language model.
+LM can output incremental complexity measures and be made adaptive.
+'''
+
 from __future__ import print_function
 import argparse
 import time
 import math
+import sys
+import warnings
 import torch
 import torch.nn as nn
 import data
 import model
-import sys
-import warnings
 
 try:
     from progress.bar import Bar
     PROGRESS = True
-except:
+except ModuleNotFoundError:
     PROGRESS = False
 
 # suppress SourceChangeWarnings
@@ -31,7 +36,7 @@ parser = argparse.ArgumentParser(description='PyTorch RNN/LSTM Language Model')
 
 # Model parameters
 parser.add_argument('--model', type=str, default='LSTM',
-                    choices=['RNN_TANH','RNN_RELU','LSTM','GRU'],
+                    choices=['RNN_TANH', 'RNN_RELU', 'LSTM', 'GRU'],
                     help='type of recurrent net')
 parser.add_argument('--emsize', type=int, default=200,
                     help='size of word embeddings')
@@ -144,7 +149,7 @@ if torch.cuda.is_available():
         print("WARNING: You have a CUDA device, so you should probably run with --cuda")
     else:
         torch.cuda.manual_seed(args.seed)
-        if (torch.cuda.device_count() == 1):
+        if torch.cuda.device_count() == 1:
             args.single = True
 
 device = torch.device("cuda" if args.cuda else "cpu")
@@ -154,19 +159,19 @@ device = torch.device("cuda" if args.cuda else "cpu")
 # Load data
 ###############################################################################
 
-# Starting from sequential data, batchify arranges the dataset into columns.
-# For instance, with the alphabet as the sequence and batch size 4, we'd get
-#  a g m s
-#  b h n t
-#  c i o u
-#  d j p v
-#  e k q w
-#  f l r x
-# These columns are treated as independent by the model, which means that the
-# dependence of e. g. 'g' on 'f' can not be learned, but allows more efficient
-# batch processing.
-
 def batchify(data, bsz):
+    ''' Starting from sequential data, batchify arranges the dataset into columns.
+    For instance, with the alphabet as the sequence and batch size 4, we'd get
+    a g m s
+    b h n t
+    c i state u
+    d j p v
+    e k q w
+    f l r x
+    These columns are treated as independent by the model, which means that the
+    dependence of e. g. 'g' on 'f' can not be learned, but allows more efficient
+    batch processing.
+    '''
     # Work out how cleanly we can divide the dataset into bsz parts.
     nbatch = data.size(0) // bsz
     # Trim off any extra elements that wouldn't cleanly fit (remainders).
@@ -203,7 +208,7 @@ if not args.test and not args.interact:
             if args.cuda:
                 model = torch.load(f).to(device)
             else:
-                model = torch.load(f,map_location='cpu')
+                model = torch.load(f, map_location='cpu')
             # after load the rnn params are not a continuous chunk of memory
             # this makes them a continuous chunk, and will speed up forward pass
             if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
@@ -226,18 +231,19 @@ criterion = nn.CrossEntropyLoss()
 # Complexity measures
 ###############################################################################
 
-def get_entropy(o):
-    # o should be a vector scoring possible classes
-    # returns a scalar entropy over o
+def get_entropy(state):
+    ''' Computes entropy of input vector '''
+    # state should be a vector scoring possible classes
+    # returns a scalar entropy over state
     if args.complexn == 0:
-        beam = o
+        beam = state
     else:
-        # duplicate o but with all losing guesses set to 0
-        beamk, beamix = torch.topk(o, args.complexn, 0)
+        # duplicate state but with all losing guesses set to 0
+        beamk, beamix = torch.topk(state, args.complexn, 0)
         if args.softcliptopk:
-            beam = torch.FloatTensor(o.size()).to(device).fill_(0).scatter(0, beamix, beamk)
+            beam = torch.FloatTensor(state.size()).to(device).fill_(0).scatter(0, beamix, beamk)
         else:
-            beam = torch.FloatTensor(o.size()).to(device).fill_(float("-inf")).scatter(0, beamix, beamk)
+            beam = torch.FloatTensor(state.size()).to(device).fill_(float("-inf")).scatter(0, beamix, beamk)
 
     probs = nn.functional.softmax(beam, dim=0)
     # log_softmax is numerically more stable than two separate operations
@@ -246,25 +252,27 @@ def get_entropy(o):
     # sum but ignore nans
     return torch.Tensor([-1 * torch.sum(prod[prod == prod])]).to(device)
 
-def get_surps(o):
-    # o should be a vector scoring possible classes
-    # returns a vector containing the surprisal of each class in o
+def get_surps(state):
+    ''' Computes surprisal for each element in given vector '''
+    # state should be a vector scoring possible classes
+    # returns a vector containing the surprisal of each class in state
     if args.complexn == 0:
-        beam = o
+        beam = state
     else:
-        # duplicate o but with all losing guesses set to 0
-        beamk, beamix = torch.topk(o, args.complexn, 0)
+        # duplicate state but with all losing guesses set to 0
+        beamk, beamix = torch.topk(state, args.complexn, 0)
         if args.softcliptopk:
-            beam = torch.FloatTensor(o.size()).to(device).fill_(0).scatter(0, beamix, beamk)
+            beam = torch.FloatTensor(state.size()).to(device).fill_(0).scatter(0, beamix, beamk)
         else:
-            beam = torch.FloatTensor(o.size()).to(device).fill_(float("-inf")).scatter(0, beamix, beamk)
+            beam = torch.FloatTensor(state.size()).to(device).fill_(float("-inf")).scatter(0, beamix, beamk)
 
     logprobs = nn.functional.log_softmax(beam, dim=0)
     return -1 * logprobs
 
-def get_guesses(o, scores=False):
-    # o should be a vector scoring possible classes
-    guessvals, guessixes = torch.topk(o, args.guessn, 0)
+def get_guesses(state, scores=False):
+    ''' Returns top-k guesses or guess indices of given vector '''
+    # state should be a vector scoring possible classes
+    guessvals, guessixes = torch.topk(state, args.guessn, 0)
     # guessvals are the scores of each input cell
     # guessixes are the indices of the max cells
     if scores:
@@ -272,18 +280,20 @@ def get_guesses(o, scores=False):
     else:
         return guessixes
 
-def get_guessscores(o):
-    return get_guesses(o, True)
+def get_guessscores(state):
+    ''' Wrapper that returns top-k guesses of given vector '''
+    return get_guesses(state, True)
 
-def get_complexity(o, t, sentid):
-    Hs = torch.log2(torch.exp(torch.squeeze(apply(get_entropy, o))))
-    surps = torch.log2(torch.exp(apply(get_surps, o)))
+def get_complexity(state, obs, sentid):
+    ''' Generates complexity output for given state, observation, and sentid '''
+    Hs = torch.log2(torch.exp(torch.squeeze(apply(get_entropy, state))))
+    surps = torch.log2(torch.exp(apply(get_surps, state)))
 
     if args.guess:
-        guesses = apply(get_guesses, o)
-        guessscores = apply(get_guessscores, o)
+        guesses = apply(get_guesses, state)
+        guessscores = apply(get_guessscores, state)
 
-    for corpuspos, targ in enumerate(t):
+    for corpuspos, targ in enumerate(obs):
         word = corpus.dictionary.idx2word[int(targ)]
         if word == '<eos>':
             # don't output the complexity of EOS
@@ -291,19 +301,21 @@ def get_complexity(o, t, sentid):
         surp = surps[corpuspos][int(targ)]
         if args.guess:
             outputguesses = []
-            for g in range(args.guessn):
-                outputguesses.append(corpus.dictionary.idx2word[int(guesses[corpuspos][g])])
+            for guess_ix in range(args.guessn):
+                outputguesses.append(corpus.dictionary.idx2word[int(guesses[corpuspos][guess_ix])])
                 if args.guessscores:
                     # output raw scores
-                    outputguesses.append("{:.3f}".format(float(guessscores[corpuspos][g])))
+                    outputguesses.append("{:.3f}".format(float(guessscores[corpuspos][guess_ix])))
                 elif args.guessratios:
                     # output scores (ratio of score(x)/score(best guess)
-                    outputguesses.append("{:.3f}".format(float(guessscores[corpuspos][g])/float(guessscores[corpuspos][0])))
+                    outputguesses.append("{:.3f}".format(
+                        float(guessscores[corpuspos][guess_ix])/float(guessscores[corpuspos][0])))
                 elif args.guessprobs:
                     # output probabilities
                     # Currently normalizes probs over N-best list;
                     # ideally it'd normalize to probs before getting the N-best
-                    outputguesses.append("{:.3f}".format(math.exp(float(nn.functional.log_softmax(guessscores[corpuspos], dim=0)[g]))))
+                    outputguesses.append("{:.3f}".format(
+                        math.exp(float(nn.functional.log_softmax(guessscores[corpuspos], dim=0)[guess_ix]))))
             outputguesses = args.csep.join(outputguesses)
             print(args.csep.join([str(word), str(sentid), str(corpuspos), str(len(word)),
                                   str(float(surp)), str(float(Hs[corpuspos])),
@@ -314,46 +326,46 @@ def get_complexity(o, t, sentid):
                                   str(float(surp)), str(float(Hs[corpuspos])),
                                   str(max(0, float(Hs[max(corpuspos-1, 0)])-float(Hs[corpuspos])))]))
 
-def apply(func, M):
-    # applies a function along a given dimension
-    tList = [func(m) for m in torch.unbind(M, dim=0)]
-    res = torch.stack(tList, dim=0)
-    return res
+def apply(func, apply_dimension):
+    ''' Applies a function along a given dimension '''
+    output_list = [func(m) for m in torch.unbind(apply_dimension, dim=0)]
+    return torch.stack(output_list, dim=0)
 
 ###############################################################################
 # Training code
 ###############################################################################
 
-def repackage_hidden(h):
-    """Wraps hidden states in new Tensors, to detach them from their history."""
-    if isinstance(h, torch.Tensor):
-        return h.detach()
+def repackage_hidden(in_state):
+    """ Wraps hidden states in new Tensors, to detach them from their history. """
+    if isinstance(in_state, torch.Tensor):
+        return in_state.detach()
     else:
-        return tuple(repackage_hidden(v) for v in h)
-
-# get_batch subdivides the source data into chunks of length args.bptt.
-# If source is equal to the example output of the batchify function, with
-# a bptt-limit of 2, we'd get the following two Variables for i = 0:
-#  a g m s      b h n t
-#  b h n t      c i o u
-# Note that despite the name of the function, the subdivison of data is not
-# done along the batch dimension (i.e. dimension 1), since that was handled
-# by the batchify function. The chunks are along dimension 0, corresponding
-# to the seq_len dimension in the LSTM.
-
-def test_get_batch(source):
-    seq_len = len(source) - 1
-    data = source[:seq_len]
-    target = source[1:1+seq_len].view(-1)
-    return data, target
+        return tuple(repackage_hidden(value) for value in in_state)
 
 def get_batch(source, i):
+    """ get_batch subdivides the source data into chunks of length args.bptt.
+    If source is equal to the example output of the batchify function, with
+    a bptt-limit of 2, we'd get the following two Variables for i = 0:
+    a g m s      b h n t
+    b h n t      c i o u
+    Note that despite the name of the function, the subdivison of data is not
+    done along the batch dimension (i.e. dimension 1), since that was handled
+    by the batchify function. The chunks are along dimension 0, corresponding
+    to the seq_len dimension in the LSTM. """
     seq_len = min(args.bptt, len(source) - 1 - i)
     data = source[i:i+seq_len]
     target = source[i+1:i+1+seq_len].view(-1)
     return data, target
 
+def test_get_batch(source):
+    """ Creates an input/target pair for evaluation """
+    seq_len = len(source) - 1
+    data = source[:seq_len]
+    target = source[1:1+seq_len].view(-1)
+    return data, target
+
 def test_evaluate(test_sentences, data_source):
+    """ Evaluate at test time (with adaptation, complexity output) """
     # Turn on evaluation mode which disables dropout.
     if args.adapt:
         # Must disable cuDNN in order to backprop during eval
@@ -373,9 +385,11 @@ def test_evaluate(test_sentences, data_source):
     if args.words:
         if not args.nocheader:
             if args.complexn == ntokens:
-                print('word{0}sentid{0}sentpos{0}wlen{0}surp{0}entropy{0}entred'.format(args.csep), end='')
+                print('word{0}sentid{0}sentpos{0}wlen{0}\
+                        surp{0}entropy{0}entred'.format(args.csep), end='')
             else:
-                print('word{0}sentid{0}sentpos{0}wlen{0}surp{1}{0}entropy{1}{0}entred{1}'.format(args.csep, args.complexn), end='')
+                print('word{0}sentid{0}sentpos{0}wlen{0}\
+                        surp{1}{0}entropy{1}{0}entred{1}'.format(args.csep, args.complexn), end='')
             if args.guess:
                 for i in range(args.guessn):
                     print('{0}guess'.format(args.csep)+str(i), end='')
@@ -400,8 +414,7 @@ def test_evaluate(test_sentences, data_source):
         data, targets = test_get_batch(sent_ids)
         if args.view_layer >= 0:
             for word_index in range(data.size(0)):
-                # Starting each batch, we detach the hidden state from how it was previously produced.
-                # If we didn't, the model would try backpropagating all the way to start of the dataset.
+                # Starting each batch, detach the hidden state
                 hidden = repackage_hidden(hidden)
                 model.zero_grad()
 
@@ -415,11 +428,10 @@ def test_evaluate(test_sentences, data_source):
                 nwords += 1
                 if targ_word != '<eos>':
                     # don't output <eos> markers to align with input
-                    #print(targ_word)
                     # output raw activations
                     print(*list(hidden[0][args.view_layer].view(1, -1).data.cpu().numpy().flatten()), sep=' ')
         else:
-            data = data.unsqueeze(1) # only needed if there is just a single sentence being processed
+            data = data.unsqueeze(1) # only needed when a single sentence is being processed
             output, hidden = model(data, hidden)
             output_flat = output.view(-1, ntokens)
             loss = criterion(output_flat, targets)
@@ -436,8 +448,10 @@ def test_evaluate(test_sentences, data_source):
 
                 # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
                 torch.nn.utils.clip_grad_norm(model.parameters(), args.clip)
-                for p in model.parameters():
-                    p.data.add_(-lr, p.grad.data)
+                for param in model.parameters():
+                    if param.grad is not None:
+                    # only update trainable parameters
+                        param.data.add_(-lr, param.grad.data)
 
         hidden = repackage_hidden(hidden)
 
@@ -451,6 +465,7 @@ def test_evaluate(test_sentences, data_source):
         return total_loss / len(data_source)
 
 def evaluate(data_source):
+    """ Evaluate for validation (no adaptation, no complexity output) """
     # Turn on evaluation mode which disables dropout.
     model.eval()
     total_loss = 0.
@@ -470,6 +485,7 @@ def evaluate(data_source):
     return total_loss / len(data_source)
 
 def train():
+    """ Train language model """
     # Turn on training mode which enables dropout.
     model.train()
     total_loss = 0.
@@ -492,10 +508,10 @@ def train():
 
         # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
         torch.nn.utils.clip_grad_norm(model.parameters(), args.clip)
-        for p in model.parameters():
-            if p.grad is not None:
+        for param in model.parameters():
+            if param.grad is not None:
                 # only update trainable parameters
-                p.data.add_(-lr, p.grad.data)
+                param.data.add_(-lr, param.grad.data)
 
         total_loss += loss.item()
 
@@ -504,8 +520,8 @@ def train():
             elapsed = time.time() - start_time
             print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.2f} | ms/batch {:5.2f} | '
                   'loss {:5.2f} | ppl {:8.2f}'.format(
-                        epoch, batch, len(train_data) // args.bptt, lr,
-                        elapsed * 1000 / args.log_interval, cur_loss, math.exp(cur_loss)))
+                      epoch, batch, len(train_data) // args.bptt, lr,
+                      elapsed * 1000 / args.log_interval, cur_loss, math.exp(cur_loss)))
             total_loss = 0.
             start_time = time.time()
 
@@ -533,7 +549,7 @@ if not args.test and not args.interact:
                     torch.save(model, f)
                     best_val_loss = val_loss
             else:
-                # Anneal the learning rate if no improvement has been seen in the validation dataset.
+                # Anneal the learning rate if no more improvement in the validation dataset.
                 if val_loss == prev_val_loss == prev2_val_loss:
                     print('Covergence achieved! Ending training early')
                     break
@@ -563,8 +579,10 @@ else:
     # Run on test data.
     if args.interact:
         # First fix Python 2.x input command
-        try: input = raw_input
-        except NameError: pass
+        try:
+            input = raw_input
+        except NameError:
+            pass
 
         # Then run interactively
         print('Running in interactive mode. Ctrl+c to exit')
@@ -578,7 +596,9 @@ else:
                     test_evaluate(test_sents, test_data)
                 except:
                     print("RuntimeError: Most likely one of the input words was out-of-vocabulary.")
-                    print("    Retrain the model with A) explicit '<unk>'s in the training set\n    or B) words in validation that aren't present in training.")
+                    print("    Retrain the model with\
+                            A) explicit '<unk>'s in the training set\n    \
+                            or B) words in validation that aren't present in training.")
                 if args.adapt:
                     with open(args.adapted_model, 'wb') as f:
                         torch.save(model, f)

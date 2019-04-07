@@ -1,9 +1,6 @@
-###############################################################################
-# Language Modeling on Penn Tree Bank
-#
-# This file generates new sentences sampled from the language model
-#
-###############################################################################
+"""
+Generates sentences by sampling from a language model
+"""
 
 import argparse
 import torch
@@ -53,7 +50,7 @@ with open(args.model_file, 'rb') as f:
     if args.cuda:
         model = torch.load(f).to(device)
     else:
-        model = torch.load(f,map_location='cpu')
+        model = torch.load(f, map_location='cpu')
     # after load the rnn params are not a continuous chunk of memory
     # this makes them a continuous chunk, and will speed up forward pass
     if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
@@ -69,16 +66,16 @@ if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
     hidden = model.module.init_hidden(1)
 else:
     hidden = model.init_hidden(1)
-input = torch.tensor(torch.rand(1, 1).mul(ntokens).long())
+input_sequence = torch.tensor(torch.rand(1, 1).mul(ntokens).long())
 if args.cuda:
-    input.data = input.data.to(device)
+    input_sequence.data = input_sequence.data.to(device)
 
 with open(args.outf, 'w') as outf:
     for i in range(args.numwords):
-        output, hidden = model(input, hidden)
+        output, hidden = model(input_sequence, hidden)
         word_weights = output.squeeze().data.div(args.temperature).exp().cpu()
         word_idx = torch.multinomial(word_weights, 1)[0]
-        input.data.fill_(word_idx)
+        input_sequence.data.fill_(word_idx)
         word = corpus.dictionary.idx2word[word_idx]
 
         if args.sentences:
@@ -90,12 +87,12 @@ with open(args.outf, 'w') as outf:
             print('| Generated {}/{} words'.format(i, args.numwords))
     if args.sentences:
         while word != '<eos>':
-            output, hidden = model(input, hidden)
+            output, hidden = model(input_sequence, hidden)
             word_weights = output.squeeze().data.div(args.temperature).exp().cpu()
             word_idx = torch.multinomial(word_weights, 1)[0]
-            input.data.fill_(word_idx)
+            input_sequence.data.fill_(word_idx)
             word = corpus.dictionary.idx2word[word_idx]
-    
+
             if args.sentences:
                 outf.write(word + ('\n' if word == '<eos>' else ' '))
             else:
