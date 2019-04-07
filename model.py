@@ -1,5 +1,6 @@
 """ Model data structures """
 
+import numpy as np
 import torch.nn as nn
 import torch
 
@@ -10,7 +11,12 @@ class RNNModel(nn.Module):
                  embedding_file=None, dropout=0.5, tie_weights=False):
         super(RNNModel, self).__init__()
         self.drop = nn.Dropout(dropout)
-        self.encoder = nn.Embedding(ntoken, ninp)
+        if embedding_file:
+            # Use pre-trained embeddings
+            embed_weights = self.load_embeddings(embedding_file, ntoken, ninp)
+            self.encoder = nn.Embedding.from_pretrained(embed_weights)
+        else:
+            self.encoder = nn.Embedding(ntoken, ninp)
         if rnn_type in ['LSTM', 'GRU']:
             self.rnn = getattr(nn, rnn_type)(ninp, nhid, nlayers, dropout=dropout)
         else:
@@ -23,9 +29,6 @@ class RNNModel(nn.Module):
         self.decoder = nn.Linear(nhid, ntoken)
 
         self.init_weights()
-        if embedding_file:
-            # Use pre-trained embeddings
-            self.load_embeddings(embedding_file)
 
         # Optionally tie weights as in:
         # "Using the Output Embedding to Improve Language Models" (Press & Wolf 2016)
@@ -64,15 +67,15 @@ class RNNModel(nn.Module):
         for weight in self.rnn.parameters():
             weight.data.uniform_(-initrange, initrange)
 
-    def load_embeddings(self, embedding_file):
-        """ Load pre-trained embeddings into encoder """
+    def load_embeddings(self, embedding_file, ntoken, ninp):
+        """ Load pre-trained embedding weights """
+        weights = np.empty((ntoken, ninp))
         with open(embedding_file, 'r') as in_file:
             ctr = 0
             for line in in_file:
-                self.encoder.weight[ctr] = torch.tensor(float(w) for w in line.strip().split()[1:])
+                weights[ctr,:] = np.array([float(w) for w in line.strip().split()[1:]])
                 ctr += 1
-        # Don't overwrite the pre-trained embeddings
-        self.encoder.weight.requires_grad = False
+        return(torch.tensor(weights).float())
 
     def forward(self, observation, hidden):
         emb = self.drop(self.encoder(observation))
