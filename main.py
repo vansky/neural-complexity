@@ -57,8 +57,8 @@ parser.add_argument('--seed', type=int, default=1111,
                     help='random seed')
 parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
-parser.add_argument('--init', action='store_true',
-                    help='zero-initialize parameters')
+parser.add_argument('--init', type = float, default = None,
+                    help='-1 to randomly Initialize. Any other value will set the weight of all parameters'))
 
 # Data parameters
 parser.add_argument('--model_file', type=str,  default='model.pt',
@@ -513,15 +513,17 @@ else:
             model = torch.load(f).to(device)
         else:
             model = torch.load(f,map_location='cpu')
+
+        if args.init != None:
+
+            if args.init != -1:
+                model.set_parameters(args.init)
+            else:
+                model.randomize_parameters()
+
+        model.rnn.flatten_parameters()
         # after load the rnn params are not a continuous chunk of memory
         # this makes them a continuous chunk, and will speed up forward pass
-        if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
-            model.module.rnn.flatten_parameters()
-        else:
-            model.rnn.flatten_parameters()
-
-        if args.init:
-            model.zero_parameters()
 
     # Run on test data.
     if args.interact:

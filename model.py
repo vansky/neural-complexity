@@ -68,3 +68,14 @@ class RNNModel(nn.Module):
                     torch.tensor(weight.new(self.nlayers, bsz, self.nhid).zero_()))
         else:
             return torch.tensor(weight.new(self.nlayers, bsz, self.nhid).zero_())
+
+    def set_parameters(self,init_val):
+        for weight in self.rnn.parameters():
+            weight.data.fill_(init_val)
+        self.encoder.weight.data.fill_(init_val)
+        self.decoder.weight.data.fill_(init_val)
+
+    def randomize_parameters(self):
+        initrange = 0.1
+        for weight in self.rnn.parameters():
+            weight.data.uniform_(-initrange, initrange)
