@@ -6,6 +6,14 @@ import torch
 
 from nltk import sent_tokenize
 
+def isfloat(instr):
+    """ Reports whether a string is floatable """
+    try:
+        _ = float(instr)
+        return(True)
+    except:
+        return(False)
+
 class Dictionary(object):
     """ Maps between observations and indices """
     def __init__(self):
@@ -25,12 +33,14 @@ class Dictionary(object):
 class SentenceCorpus(object):
     """ Loads train/dev/test corpora and dictionary """
     def __init__(self, path, vocab_file, test_flag=False, interact_flag=False,
-                 checkpoint_flag=False, embedding_flag=False, lower_flag=False,
+                 checkpoint_flag=False, predefined_vocab_flag=False, lower_flag=False,
+                 collapse_nums_flag=False,
                  trainfname='train.txt',
                  validfname='valid.txt',
                  testfname='test.txt'):
         self.lower = lower_flag
-        if not (test_flag or interact_flag or checkpoint_flag or embedding_flag):
+        self.collapse_nums = collapse_nums_flag
+        if not (test_flag or interact_flag or checkpoint_flag or predefined_vocab_flag):
             # training mode
             self.dictionary = Dictionary()
             self.train = self.tokenize(os.path.join(path, trainfname))
@@ -43,13 +53,14 @@ class SentenceCorpus(object):
             else:
                 self.dictionary = Dictionary()
                 self.load_dict(vocab_file)
-            if checkpoint_flag or embedding_flag:
+            if checkpoint_flag or predefined_vocab_flag:
                 # load from a checkpoint
                 self.train = self.tokenize_with_unks(os.path.join(path, trainfname))
                 self.valid = self.tokenize_with_unks(os.path.join(path, validfname))
             elif test_flag:
                 # test mode
                 self.test = self.sent_tokenize_with_unks(os.path.join(path, testfname))
+
 
     def save_dict(self, path):
         """ Saves dictionary to disk """
@@ -105,10 +116,16 @@ class SentenceCorpus(object):
                         tokens += len(words)
                         if self.lower:
                             for word in words:
-                                self.dictionary.add_word(word.lower())
+                                if isfloat(word) and self.collapse_nums:
+                                    self.dictionary.add_word('<num>')
+                                else:
+                                    self.dictionary.add_word(word.lower())
                         else:
                             for word in words:
-                                self.dictionary.add_word(word)
+                                if isfloat(word) and self.collapse_nums:
+                                    self.dictionary.add_word('<num>')
+                                else:
+                                    self.dictionary.add_word(word)
 
             # Tokenize file content
             with gzip.open(path, 'rb') as file_handle:
@@ -127,11 +144,17 @@ class SentenceCorpus(object):
                             words = line.split() + ['<eos>']
                         if self.lower:
                             for word in words:
-                                ids[token] = self.dictionary.word2idx[word.lower()]
+                                if isfloat(word) and '<num>' in self.dictionary.word2idx:
+                                    ids[token] = self.dictionary.add_word("<num>")
+                                else:
+                                    ids[token] = self.dictionary.add_word(word.lower())
                                 token += 1
                         else:
                             for word in words:
-                                ids[token] = self.dictionary.word2idx[word]
+                                if isfloat(word) and '<num>' in self.dictionary.word2idx:
+                                    ids[token] = self.dictionary.add_word("<num>")
+                                else:
+                                    ids[token] = self.dictionary.add_word(word)
                                 token += 1
         else:
             with open(path, 'r') as file_handle:
@@ -150,10 +173,16 @@ class SentenceCorpus(object):
                         tokens += len(words)
                         if self.lower:
                             for word in words:
-                                self.dictionary.add_word(word.lower())
+                                if isfloat(word) and self.collapse_nums:
+                                    self.dictionary.add_word('<num>')
+                                else:
+                                    self.dictionary.add_word(word.lower())
                         else:
                             for word in words:
-                                self.dictionary.add_word(word)
+                                if isfloat(word) and self.collapse_nums:
+                                    self.dictionary.add_word('<num>')
+                                else:
+                                    self.dictionary.add_word(word)
 
             # Tokenize file content
             with open(path, 'r') as file_handle:
@@ -172,11 +201,17 @@ class SentenceCorpus(object):
                             words = line.split() + ['<eos>']
                         if self.lower:
                             for word in words:
-                                ids[token] = self.dictionary.word2idx[word.lower()]
+                                if isfloat(word) and '<num>' in self.dictionary.word2idx:
+                                    ids[token] = self.dictionary.add_word("<num>")
+                                else:
+                                    ids[token] = self.dictionary.add_word(word.lower())
                                 token += 1
                         else:
                             for word in words:
-                                ids[token] = self.dictionary.word2idx[word]
+                                if isfloat(word) and '<num>' in self.dictionary.word2idx:
+                                    ids[token] = self.dictionary.add_word("<num>")
+                                else:
+                                    ids[token] = self.dictionary.add_word(word)
                                 token += 1
         return ids
 
@@ -220,6 +255,8 @@ class SentenceCorpus(object):
                                 # Convert OOV to <unk>
                                 if word.lower() not in self.dictionary.word2idx:
                                     ids[token] = self.dictionary.add_word("<unk>")
+                                elif isfloat(word) and '<num>' in self.dictionary.word2idx:
+                                    ids[token] = self.dictionary.add_word("<num>")
                                 else:
                                     ids[token] = self.dictionary.word2idx[word.lower()]
                                 token += 1
@@ -228,6 +265,8 @@ class SentenceCorpus(object):
                                 # Convert OOV to <unk>
                                 if word not in self.dictionary.word2idx:
                                     ids[token] = self.dictionary.add_word("<unk>")
+                                elif isfloat(word) and '<num>' in self.dictionary.word2idx:
+                                    ids[token] = self.dictionary.add_word("<num>")
                                 else:
                                     ids[token] = self.dictionary.word2idx[word]
                                 token += 1
@@ -268,6 +307,8 @@ class SentenceCorpus(object):
                                 # Convert OOV to <unk>
                                 if word.lower() not in self.dictionary.word2idx:
                                     ids[token] = self.dictionary.add_word("<unk>")
+                                elif isfloat(word) and '<num>' in self.dictionary.word2idx:
+                                    ids[token] = self.dictionary.add_word("<num>")
                                 else:
                                     ids[token] = self.dictionary.word2idx[word.lower()]
                                 token += 1
@@ -276,6 +317,8 @@ class SentenceCorpus(object):
                                 # Convert OOV to <unk>
                                 if word not in self.dictionary.word2idx:
                                     ids[token] = self.dictionary.add_word("<unk>")
+                                elif isfloat(word) and '<num>' in self.dictionary.word2idx:
+                                    ids[token] = self.dictionary.add_word("<num>")
                                 else:
                                     ids[token] = self.dictionary.word2idx[word]
                                 token += 1
@@ -295,27 +338,7 @@ class SentenceCorpus(object):
                             continue
                         sents.append(line.strip())
                         words = ['<eos>'] + line.split() + ['<eos>']
-                        tokens = len(words)
-
-                        # Tokenize file content
-                        ids = torch.LongTensor(tokens)
-                        token = 0
-                        if self.lower:
-                            for word in words:
-                                # Convert OOV to <unk>
-                                if word.lower() not in self.dictionary.word2idx:
-                                    ids[token] = self.dictionary.add_word("<unk>")
-                                else:
-                                    ids[token] = self.dictionary.word2idx[word.lower()]
-                                token += 1
-                        else:
-                            for word in words:
-                                # Convert OOV to <unk>
-                                if word not in self.dictionary.word2idx:
-                                    ids[token] = self.dictionary.add_word("<unk>")
-                                else:
-                                    ids[token] = self.dictionary.word2idx[word]
-                                token += 1
+                        ids = self.convert_to_ids(words)
                         all_ids.append(ids)
         else:
             with open(path, 'r') as file_handle:
@@ -326,27 +349,7 @@ class SentenceCorpus(object):
                             continue
                         sents.append(line.strip())
                         words = ['<eos>'] + line.split() + ['<eos>']
-                        tokens = len(words)
-
-                        # Tokenize file content
-                        ids = torch.LongTensor(tokens)
-                        token = 0
-                        if self.lower:
-                            for word in words:
-                                # Convert OOV to <unk>
-                                if word.lower() not in self.dictionary.word2idx:
-                                    ids[token] = self.dictionary.add_word("<unk>")
-                                else:
-                                    ids[token] = self.dictionary.word2idx[word.lower()]
-                                token += 1
-                        else:
-                            for word in words:
-                                # Convert OOV to <unk>
-                                if word not in self.dictionary.word2idx:
-                                    ids[token] = self.dictionary.add_word("<unk>")
-                                else:
-                                    ids[token] = self.dictionary.word2idx[word]
-                                token += 1
+                        ids = self.convert_to_ids(words)
                         all_ids.append(ids)
         return (sents, all_ids)
 
@@ -356,7 +359,14 @@ class SentenceCorpus(object):
         sents = [line.strip()]
 
         words = ['<eos>'] + line.strip().split() + ['<eos>']
-        tokens = len(words)
+
+        ids = self.convert_to_ids(words)
+        all_ids.append(ids)
+        return (sents, all_ids)
+
+    def convert_to_ids(self, words, tokens=None):
+        if tokens is None:
+            tokens = len(words)
 
         # Tokenize file content
         ids = torch.LongTensor(tokens)
@@ -366,6 +376,8 @@ class SentenceCorpus(object):
                 # Convert OOV to <unk>
                 if word.lower() not in self.dictionary.word2idx:
                     ids[token] = self.dictionary.add_word("<unk>")
+                elif isfloat(word) and '<num>' in self.dictionary.word2idx:
+                    ids[token] = self.dictionary.add_word("<num>")
                 else:
                     ids[token] = self.dictionary.word2idx[word.lower()]
                 token += 1
@@ -374,8 +386,9 @@ class SentenceCorpus(object):
                 # Convert OOV to <unk>
                 if word not in self.dictionary.word2idx:
                     ids[token] = self.dictionary.add_word("<unk>")
+                elif isfloat(word) and '<num>' in self.dictionary.word2idx:
+                    ids[token] = self.dictionary.add_word("<num>")
                 else:
                     ids[token] = self.dictionary.word2idx[word]
                 token += 1
-        all_ids.append(ids)
-        return (sents, all_ids)
+        return(ids)

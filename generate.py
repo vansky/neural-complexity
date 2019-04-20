@@ -66,7 +66,7 @@ if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
     hidden = model.module.init_hidden(1)
 else:
     hidden = model.init_hidden(1)
-input_sequence = torch.tensor(torch.rand(1, 1).mul(ntokens).long())
+input_sequence = torch.rand(1, 1).mul(ntokens).long()
 if args.cuda:
     input_sequence.data = input_sequence.data.to(device)
 

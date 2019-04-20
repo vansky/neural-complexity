@@ -82,6 +82,8 @@ parser.add_argument('--validfname', type=str, default='valid.txt',
                     help='name of the validation file')
 parser.add_argument('--testfname', type=str, default='test.txt',
                     help='name of the test file')
+parser.add_argument('--collapse_nums_flag', action='store_true',
+                    help='collapse number tokens into a unified <num> token')
 
 # Runtime parameters
 parser.add_argument('--test', action='store_true',
@@ -181,9 +183,18 @@ def batchify(data, bsz):
     # Turning the data over to CUDA at this point may lead to more OOM errors
     return data.to(device)
 
+try:
+    with open(args.vocab_file, 'r') as f:
+        # We're using a pre-existing vocab file, so we shouldn't overwrite it
+        args.predefined_vocab_flag = True
+except FileNotFoundError:
+    # We should create a new vocab file
+    args.predefined_vocab_flag = False
+
 corpus = data.SentenceCorpus(args.data_dir, args.vocab_file, args.test, args.interact,
                              checkpoint_flag=args.load_checkpoint,
-                             embedding_flag=args.embedding_file,
+                             predefined_vocab_flag=args.predefined_vocab_flag,
+                             collapse_nums_flag=args.collapse_nums_flag,
                              lower_flag=args.lowercase,
                              trainfname=args.trainfname,
                              validfname=args.validfname,
