@@ -43,7 +43,7 @@ To freeze the weights of the adaptive model and evaluate it on `heldout_set.txt`
 * Outputs incremental word-by-word information-theoretic complexity estimates (i.e. surprisal, entropy, entropy reduction) if the runtime command `--words` is given.
 * Can function as an [adaptive language model](http://aclweb.org/anthology/D18-1499) if the runtime command `--adapt` is given (van Schijndel and Linzen, 2018). [Complete replication instructions](https://github.com/vansky/replications/blob/master/vanschijndel_linzen-2018-emnlp/vanschijndel_linzen-2018-emnlp-replication.md)
 * Can operate interactively
-* Early convergence detection (when loss is the same for 3 consecutive training epochs)
+* Early convergence detection (when validation loss does not increase for 3 epochs)
 * Any words in the test corpus which were not seen during training are converted to `<unk>`. The probability of `<unk>` can be explicitly trained on `<unk>` tokens in the training data and/or implicitly learned using new words seen during validation.
 * Can operate directly on gzipped corpora
 * Does not require training data to be present at test time

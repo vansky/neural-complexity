@@ -396,11 +396,9 @@ def test_evaluate(test_sentences, data_source):
     if args.words:
         if not args.nocheader:
             if args.complexn == ntokens:
-                print('word{0}sentid{0}sentpos{0}wlen{0}\
-                        surp{0}entropy{0}entred'.format(args.csep), end='')
+                print('word{0}sentid{0}sentpos{0}wlen{0}surp{0}entropy{0}entred'.format(args.csep), end='')
             else:
-                print('word{0}sentid{0}sentpos{0}wlen{0}\
-                        surp{1}{0}entropy{1}{0}entred{1}'.format(args.csep, args.complexn), end='')
+                print('word{0}sentid{0}sentpos{0}wlen{0}surp{1}{0}entropy{1}{0}entred{1}'.format(args.csep, args.complexn), end='')
             if args.guess:
                 for i in range(args.guessn):
                     print('{0}guess'.format(args.csep)+str(i), end='')
@@ -561,12 +559,13 @@ if not args.test and not args.interact:
                     best_val_loss = val_loss
             else:
                 # Anneal the learning rate if no more improvement in the validation dataset.
-                if val_loss == prev_val_loss == prev2_val_loss:
+                if (not prev2_val_loss) and\
+                   (val_loss >= prev2_val_loss) and (prev_val_loss >= prev2_val_loss):
                     print('Covergence achieved! Ending training early')
                     break
-                prev2_val_loss = prev_val_loss
-                prev_val_loss = val_loss
                 lr /= 4.0
+            prev2_val_loss = prev_val_loss
+            prev_val_loss = val_loss
     except KeyboardInterrupt:
         print('-' * 89)
         print('Exiting from training early')
