@@ -539,6 +539,7 @@ lr = args.lr
 best_val_loss = None
 prev_val_loss = None
 prev2_val_loss = None
+prev3_val_loss = None
 
 # At any point you can hit Ctrl + C to break out of training early.
 if not args.test and not args.interact:
@@ -559,11 +560,12 @@ if not args.test and not args.interact:
                     best_val_loss = val_loss
             else:
                 # Anneal the learning rate if no more improvement in the validation dataset.
-                if (not prev2_val_loss) and\
-                   (val_loss >= prev2_val_loss) and (prev_val_loss >= prev2_val_loss):
+                if (prev3_val_loss) and\
+                   (val_loss >= prev3_val_loss) and (val_loss >= prev2_val_loss) and (val_loss >= prev_val_loss):
                     print('Covergence achieved! Ending training early')
                     break
                 lr /= 4.0
+            prev3_val_loss = prev2_val_loss
             prev2_val_loss = prev_val_loss
             prev_val_loss = val_loss
     except KeyboardInterrupt:
@@ -588,6 +590,8 @@ else:
         if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
             model.module.rnn.flatten_parameters()
         else:
+            if isinstance(model, torch.nn.DataParallel):
+                model = model.module
             model.rnn.flatten_parameters()
 
     # Run on test data.
