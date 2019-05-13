@@ -537,9 +537,7 @@ def train():
 # Loop over epochs.
 lr = args.lr
 best_val_loss = None
-prev_val_loss = None
-prev2_val_loss = None
-prev3_val_loss = None
+no_improvement = 0
 
 # At any point you can hit Ctrl + C to break out of training early.
 if not args.test and not args.interact:
@@ -555,19 +553,17 @@ if not args.test and not args.interact:
             print('-' * 89)
             # Save the model if the validation loss is the best we've seen so far.
             if not best_val_loss or val_loss < best_val_loss:
+                no_improvement = 0
                 with open(args.model_file, 'wb') as f:
                     torch.save(model, f)
                     best_val_loss = val_loss
             else:
                 # Anneal the learning rate if no more improvement in the validation dataset.
-                if (prev3_val_loss) and\
-                   (val_loss >= prev3_val_loss) and (val_loss >= prev2_val_loss) and (val_loss >= prev_val_loss):
+                no_improvement += 1
+                if no_improvement >= 3:
                     print('Covergence achieved! Ending training early')
                     break
                 lr /= 4.0
-            prev3_val_loss = prev2_val_loss
-            prev2_val_loss = prev_val_loss
-            prev_val_loss = val_loss
     except KeyboardInterrupt:
         print('-' * 89)
         print('Exiting from training early')
