@@ -56,6 +56,8 @@ with open(args.model_file, 'rb') as f:
     if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
         model.module.rnn.flatten_parameters()
     else:
+        if isinstance(model, torch.nn.DataParallel):
+            model = model.module
         model.rnn.flatten_parameters()
 model.eval()
 

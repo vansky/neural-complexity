@@ -220,12 +220,6 @@ if not args.test and not args.interact:
                 model = torch.load(f).to(device)
             else:
                 model = torch.load(f, map_location='cpu')
-            # after load the rnn params are not a continuous chunk of memory
-            # this makes them a continuous chunk, and will speed up forward pass
-            if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
-                model.module.rnn.flatten_parameters()
-            else:
-                model.rnn.flatten_parameters()
     else:
         ntokens = len(corpus.dictionary)
         model = model.RNNModel(args.model, ntokens, args.emsize, args.nhid,
@@ -235,6 +229,15 @@ if not args.test and not args.interact:
         if (not args.single) and (torch.cuda.device_count() > 1):
             # Scatters minibatches (in dim=1) across available GPUs
             model = nn.DataParallel(model, dim=1)
+
+    # after load the rnn params are not a continuous chunk of memory
+    # this makes them a continuous chunk, and will speed up forward pass
+    if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
+        model.module.rnn.flatten_parameters()
+    else:
+        if isinstance(model, torch.nn.DataParallel):
+            model = model.module
+        model.rnn.flatten_parameters()
 
 criterion = nn.CrossEntropyLoss()
 
