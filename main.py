@@ -168,7 +168,7 @@ def batchify(data, bsz):
     For instance, with the alphabet as the sequence and batch size 4, we'd get
     a g m s
     b h n t
-    c i state u
+    c i o u
     d j p v
     e k q w
     f l r x
