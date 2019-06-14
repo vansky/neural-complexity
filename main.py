@@ -230,13 +230,12 @@ if not args.test and not args.interact:
 
     # after load the rnn params are not a continuous chunk of memory
     # this makes them a continuous chunk, and will speed up forward pass
- #   if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
- #       model.module.rnn.flatten_parameters()
- #   else:
     if isinstance(model, torch.nn.DataParallel):
+        # if multi-gpu, access real model for training
         model = model.module
     elif args.cuda:
         if (not args.single) and (torch.cuda.device_count() > 1):
+            # If applicable, use multi-gpu for training
             # Scatters minibatches (in dim=1) across available GPUs
             model = nn.DataParallel(model, dim=1)
     model.rnn.flatten_parameters()
@@ -420,10 +419,6 @@ def test_evaluate(test_sentences, data_source):
         sent_ids = data_source[i].to(device)
         # We predict all words but the first, so determine loss for those
         sent = test_sentences[i]
-#        if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
-#            # "module" is necessary when using DataParallel
-#            hidden = model.module.init_hidden(1) # number of parallel sentences being processed
-#        else:
         hidden = model.init_hidden(1) # number of parallel sentences being processed
         data, targets = test_get_batch(sent_ids)
         if args.view_layer >= 0:
@@ -489,10 +484,6 @@ def evaluate(data_source):
     model.eval()
     total_loss = 0.
     ntokens = len(corpus.dictionary)
-#    if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
-#        # "module" is necessary when using DataParallel
-#        hidden = model.module.init_hidden(args.batch_size)
-#    else:
     hidden = model.init_hidden(args.batch_size)
     with torch.no_grad():
         for i in range(0, data_source.size(0) - 1, args.bptt):
@@ -510,10 +501,6 @@ def train():
     total_loss = 0.
     start_time = time.time()
     ntokens = len(corpus.dictionary)
-    #if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
-        # "module" is necessary when using DataParallel
-    #    hidden = model.module.init_hidden(args.batch_size)
-    #else:
     hidden = model.init_hidden(args.batch_size)
     for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
         data, targets = get_batch(train_data, i)
@@ -594,12 +581,8 @@ else:
         # after load the rnn params are not a continuous chunk of memory
         # this makes them a continuous chunk, and will speed up forward pass
         if isinstance(model, torch.nn.DataParallel):
+            # if multi-gpu, access real model for testing
             model = model.module
-#        if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
-#            model.module.rnn.flatten_parameters()
-#        else:
-#            if isinstance(model, torch.nn.DataParallel):
-#                model = model.module
         model.rnn.flatten_parameters()
 
     # Run on test data.
