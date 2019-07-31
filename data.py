@@ -45,6 +45,12 @@ class SentenceCorpus(object):
             self.dictionary = Dictionary()
             self.train = self.tokenize(os.path.join(path, trainfname))
             self.valid = self.tokenize_with_unks(os.path.join(path, validfname))
+            try:
+                # don't require a test set at train time,
+                # but if there is one, get a sense of whether unks will be required
+                self.test = self.tokenize_with_unks(os.path.join(path, testfname))
+            except:
+                pass
             self.save_dict(vocab_file)
         else:
             # load pretrained model
