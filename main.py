@@ -447,7 +447,11 @@ def test_evaluate(test_sentences, data_source):
         else:
             data = data.unsqueeze(1) # only needed when a single sentence is being processed
             output, hidden = model(data, hidden)
-            output_flat = output.view(-1, ntokens)
+            try:
+                output_flat = output.view(-1, ntokens)
+            except RuntimeError:
+                print("Vocabulary Error! Most likely there weren't unks in training and unks are now needed for testing")
+                raise
             loss = criterion(output_flat, targets)
             total_loss += loss.item()
             if args.words:
