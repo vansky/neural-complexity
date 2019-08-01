@@ -34,7 +34,7 @@ class SentenceCorpus(object):
     """ Loads train/dev/test corpora and dictionary """
     def __init__(self, path, vocab_file, test_flag=False, interact_flag=False,
                  checkpoint_flag=False, predefined_vocab_flag=False, lower_flag=False,
-                 collapse_nums_flag=False,
+                 collapse_nums_flag=False,multisentence_test_flag=False,
                  trainfname='train.txt',
                  validfname='valid.txt',
                  testfname='test.txt'):
@@ -61,7 +61,10 @@ class SentenceCorpus(object):
                 self.load_dict(vocab_file)
             if test_flag:
                 # test mode
-                self.test = self.sent_tokenize_with_unks(os.path.join(path, testfname))
+                if multisentence_test_flag:
+                    self.test = self.tokenize_with_unks(os.path.join(path, testfname))
+                else:
+                    self.test = self.sent_tokenize_with_unks(os.path.join(path, testfname))
             elif checkpoint_flag or predefined_vocab_flag:
                 # load from a checkpoint
                 self.train = self.tokenize_with_unks(os.path.join(path, trainfname))

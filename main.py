@@ -92,6 +92,8 @@ parser.add_argument('--load_checkpoint', action='store_true',
                     help='continue training a pre-trained LM')
 parser.add_argument('--single', action='store_true',
                     help='use only a single GPU (even if more are available)')
+parser.add_argument('--multisentence_test', action='store_true',
+                    help='treat multiple sentences as a single stream at test time')
 
 parser.add_argument('--adapt', action='store_true',
                     help='adapt model weights during evaluation')
@@ -197,6 +199,7 @@ corpus = data.SentenceCorpus(args.data_dir, args.vocab_file, args.test, args.int
                              checkpoint_flag=args.load_checkpoint,
                              predefined_vocab_flag=args.predefined_vocab_flag,
                              collapse_nums_flag=args.collapse_nums_flag,
+                             multisentence_test_flag=args.multisentence_test,
                              lower_flag=args.lowercase,
                              trainfname=args.trainfname,
                              validfname=args.validfname,
@@ -204,7 +207,10 @@ corpus = data.SentenceCorpus(args.data_dir, args.vocab_file, args.test, args.int
 
 if not args.interact:
     if args.test:
-        test_sents, test_data = corpus.test
+        if args.multisentence_test:
+            test_data = corpus.test
+        else:
+            test_sents, test_data = corpus.test
     else:
         train_data = batchify(corpus.train, args.batch_size)
         val_data = batchify(corpus.valid, args.batch_size)
@@ -418,7 +424,8 @@ def test_evaluate(test_sentences, data_source):
     for i in range(len(data_source)):
         sent_ids = data_source[i].to(device)
         # We predict all words but the first, so determine loss for those
-        sent = test_sentences[i]
+        if test_sentences:
+            sent = test_sentences[i]
         hidden = model.init_hidden(1) # number of parallel sentences being processed
         data, targets = test_get_batch(sent_ids)
         if args.view_layer >= 0:
@@ -459,7 +466,10 @@ def test_evaluate(test_sentences, data_source):
                 get_complexity(output_flat, targets, i)
             else:
                 # output sentence-level loss
-                print(str(sent)+":"+str(loss.item()))
+                if test_sentences:
+                    print(str(sent)+":"+str(loss.item()))
+                else:
+                    print(str(loss.item()))
 
             if args.adapt:
                 loss.backward()
@@ -627,7 +637,10 @@ else:
         except KeyboardInterrupt:
             print(' ')
     else:
-        test_loss = test_evaluate(test_sents, test_data)
+        if args.multisentence_test:
+            test_loss = test_evaluate(None, test_data)
+        else:
+            test_loss = test_evaluate(test_sents, test_data)
         if args.adapt:
             with open(args.adapted_model, 'wb') as f:
                 torch.save(model, f)
