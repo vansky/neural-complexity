@@ -208,7 +208,7 @@ corpus = data.SentenceCorpus(args.data_dir, args.vocab_file, args.test, args.int
 if not args.interact:
     if args.test:
         if args.multisentence_test:
-            test_data = corpus.test
+            test_data = [corpus.test]
         else:
             test_sents, test_data = corpus.test
     else:
