@@ -34,13 +34,13 @@ class SentenceCorpus(object):
     """ Loads train/dev/test corpora and dictionary """
     def __init__(self, path, vocab_file, test_flag=False, interact_flag=False,
                  checkpoint_flag=False, predefined_vocab_flag=False, lower_flag=False,
-                 collapse_nums_flag=False,multisentence_test_flag=False,
+                 collapse_nums_flag=False,multisentence_test_flag=False,generate=False,
                  trainfname='train.txt',
                  validfname='valid.txt',
                  testfname='test.txt'):
         self.lower = lower_flag
         self.collapse_nums = collapse_nums_flag
-        if not (test_flag or interact_flag or checkpoint_flag or predefined_vocab_flag):
+        if not (test_flag or interact_flag or checkpoint_flag or predefined_vocab_flag or generate_flag):
             # training mode
             self.dictionary = Dictionary()
             self.train = self.tokenize(os.path.join(path, trainfname))

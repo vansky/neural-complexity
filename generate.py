@@ -61,7 +61,7 @@ with open(args.model_file, 'rb') as f:
         model.rnn.flatten_parameters()
 model.eval()
 
-corpus = data.SentenceCorpus(args.data_dir, args.vocab_file, True)
+corpus = data.SentenceCorpus(args.data_dir, args.vocab_file, generate_flag=True)
 
 ntokens = len(corpus.dictionary)
 if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
