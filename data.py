@@ -34,7 +34,7 @@ class SentenceCorpus(object):
     """ Loads train/dev/test corpora and dictionary """
     def __init__(self, path, vocab_file, test_flag=False, interact_flag=False,
                  checkpoint_flag=False, predefined_vocab_flag=False, lower_flag=False,
-                 collapse_nums_flag=False,multisentence_test_flag=False,generate=False,
+                 collapse_nums_flag=False,multisentence_test_flag=False,generate_flag=False,
                  trainfname='train.txt',
                  validfname='valid.txt',
                  testfname='test.txt'):
