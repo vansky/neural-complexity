@@ -87,7 +87,7 @@ class SentenceCorpus(object):
 
     def load_dict(self, path):
         """ Loads dictionary from disk """
-        assert os.path.exists(path)
+        assert os.path.exists(path), "Bad path: %s" % path
         if path[-3:] == 'bin':
             # This check actually seems to be faster than passing in a binary flag
             # Assume dict is binarized
@@ -106,7 +106,7 @@ class SentenceCorpus(object):
 
     def tokenize(self, path):
         """ Tokenizes a text file. """
-        assert os.path.exists(path)
+        assert os.path.exists(path), "Bad path: %s" % path
         # Add words to the dictionary
         if path[-2:] == 'gz':
             with gzip.open(path, 'rb') as file_handle:
@@ -226,7 +226,7 @@ class SentenceCorpus(object):
 
     def tokenize_with_unks(self, path):
         """ Tokenizes a text file, adding unks if needed. """
-        assert os.path.exists(path)
+        assert os.path.exists(path), "Bad path: %s" % path
         if path[-2:] == 'gz':
             # Determine the length of the corpus
             with gzip.open(path, 'rb') as file_handle:
@@ -335,7 +335,7 @@ class SentenceCorpus(object):
 
     def sent_tokenize_with_unks(self, path):
         """ Tokenizes a text file into sentences, adding unks if needed. """
-        assert os.path.exists(path)
+        assert os.path.exists(path), "Bad path: %s" % path
         all_ids = []
         sents = []
         if path[-2:] == 'gz':

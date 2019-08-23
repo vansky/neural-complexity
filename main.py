@@ -564,9 +564,9 @@ if not args.test and not args.interact:
             train()
             val_loss = evaluate(val_data)
             print('-' * 89)
-            print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
+            print('| end of epoch {:3d} | time: {:5.2f}s | lr: {:4.8f} | '
                   'valid ppl {:8.2f}'.format(epoch, (time.time() - epoch_start_time),
-                                             val_loss, math.exp(val_loss)))
+                                             lr, math.exp(val_loss)))
             print('-' * 89)
             # Save the model if the validation loss is the best we've seen so far.
             if not best_val_loss or val_loss < best_val_loss:
