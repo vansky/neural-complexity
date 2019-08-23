@@ -103,6 +103,8 @@ parser.add_argument('--view_layer', type=int, default=-1,
                     help='which layer should output cell states')
 parser.add_argument('--view_hidden', action='store_true',
                     help='output the hidden state rather than the cell state')
+parser.add_argument('--verbose_view_layer', action='store_true',
+                    help='output the input observation followed by the vector activations')
 
 parser.add_argument('--words', action='store_true',
                     help='evaluate word-level complexities (instead of sentence-level loss)')
@@ -448,7 +450,8 @@ def test_evaluate(test_sentences, data_source):
                 targ_word = corpus.dictionary.idx2word[int(target.data)]
                 nwords += 1
                 if input_word != '<eos>': # not in (input_word,targ_word):
-                    #print(input_word)
+                    if args.verbose_view_layer:
+                        print(input_word,end=" ")
                     # don't output <eos> markers to align with input
                     # output raw activations
                     if args.view_hidden:
