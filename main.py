@@ -444,9 +444,11 @@ def test_evaluate(test_sentences, data_source):
                 output_flat = output.view(-1, ntokens)
                 loss = criterion(output_flat, target)
                 total_loss += loss.item()
+                input_word = corpus.dictionary.idx2word[int(word_input.data)]
                 targ_word = corpus.dictionary.idx2word[int(target.data)]
                 nwords += 1
-                if targ_word != '<eos>':
+                if input_word != '<eos>': # not in (input_word,targ_word):
+                    #print(input_word)
                     # don't output <eos> markers to align with input
                     # output raw activations
                     if args.view_hidden:
