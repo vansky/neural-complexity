@@ -90,6 +90,8 @@ parser.add_argument('--test', action='store_true',
                     help='test a trained LM')
 parser.add_argument('--load_checkpoint', action='store_true',
                     help='continue training a pre-trained LM')
+parser.add_argument('--freeze_embedding', action='store_true',
+                    help='do not train embedding weights')
 parser.add_argument('--single', action='store_true',
                     help='use only a single GPU (even if more are available)')
 parser.add_argument('--multisentence_test', action='store_true',
@@ -238,7 +240,8 @@ if not args.test and not args.interact:
         ntokens = len(corpus.dictionary)
         model = model.RNNModel(args.model, ntokens, args.emsize, args.nhid,
                                args.nlayers, embedding_file=args.embedding_file,
-                               dropout=args.dropout, tie_weights=args.tied).to(device)
+                               dropout=args.dropout, tie_weights=args.tied,
+                               freeze_embedding=args.freeze_embedding).to(device)
 
     # after load the rnn params are not a continuous chunk of memory
     # this makes them a continuous chunk, and will speed up forward pass
