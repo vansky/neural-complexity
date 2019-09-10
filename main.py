@@ -90,8 +90,12 @@ parser.add_argument('--test', action='store_true',
                     help='test a trained LM')
 parser.add_argument('--load_checkpoint', action='store_true',
                     help='continue training a pre-trained LM')
+parser.add_argument('--freeze_embedding', action='store_true',
+                    help='do not train embedding weights')
 parser.add_argument('--single', action='store_true',
                     help='use only a single GPU (even if more are available)')
+parser.add_argument('--multisentence_test', action='store_true',
+                    help='treat multiple sentences as a single stream at test time')
 
 parser.add_argument('--adapt', action='store_true',
                     help='adapt model weights during evaluation')
@@ -101,6 +105,8 @@ parser.add_argument('--view_layer', type=int, default=-1,
                     help='which layer should output cell states')
 parser.add_argument('--view_hidden', action='store_true',
                     help='output the hidden state rather than the cell state')
+parser.add_argument('--verbose_view_layer', action='store_true',
+                    help='output the input observation followed by the vector activations')
 
 parser.add_argument('--words', action='store_true',
                     help='evaluate word-level complexities (instead of sentence-level loss)')
@@ -146,6 +152,10 @@ if args.adapt:
     # If adapting, we must be in test mode
     args.test = True
 
+if args.view_layer != -1:
+    # There shouldn't be a cheader if we're looking at model internals
+    args.nocheader = True
+    
 # Set the random seed manually for reproducibility.
 torch.manual_seed(args.seed)
 if torch.cuda.is_available():
@@ -197,6 +207,7 @@ corpus = data.SentenceCorpus(args.data_dir, args.vocab_file, args.test, args.int
                              checkpoint_flag=args.load_checkpoint,
                              predefined_vocab_flag=args.predefined_vocab_flag,
                              collapse_nums_flag=args.collapse_nums_flag,
+                             multisentence_test_flag=args.multisentence_test,
                              lower_flag=args.lowercase,
                              trainfname=args.trainfname,
                              validfname=args.validfname,
@@ -204,7 +215,10 @@ corpus = data.SentenceCorpus(args.data_dir, args.vocab_file, args.test, args.int
 
 if not args.interact:
     if args.test:
-        test_sents, test_data = corpus.test
+        if args.multisentence_test:
+            test_data = [corpus.test]
+        else:
+            test_sents, test_data = corpus.test
     else:
         train_data = batchify(corpus.train, args.batch_size)
         val_data = batchify(corpus.valid, args.batch_size)
@@ -226,18 +240,18 @@ if not args.test and not args.interact:
         ntokens = len(corpus.dictionary)
         model = model.RNNModel(args.model, ntokens, args.emsize, args.nhid,
                                args.nlayers, embedding_file=args.embedding_file,
-                               dropout=args.dropout, tie_weights=args.tied).to(device)
+                               dropout=args.dropout, tie_weights=args.tied,
+                               freeze_embedding=args.freeze_embedding).to(device)
 
-    # after load the rnn params are not a continuous chunk of memory
-    # this makes them a continuous chunk, and will speed up forward pass
- #   if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
- #       model.module.rnn.flatten_parameters()
- #   else:
     if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
+        # If applicable, use multi-gpu for training
         # Scatters minibatches (in dim=1) across available GPUs
         model = nn.DataParallel(model, dim=1)
     if isinstance(model, torch.nn.DataParallel):
+        # if multi-gpu, access real model for training
         model = model.module
+    # after load the rnn params are not a continuous chunk of memory
+    # this makes them a continuous chunk, and will speed up forward pass
     model.rnn.flatten_parameters()
 
 criterion = nn.CrossEntropyLoss()
@@ -418,11 +432,8 @@ def test_evaluate(test_sentences, data_source):
     for i in range(len(data_source)):
         sent_ids = data_source[i].to(device)
         # We predict all words but the first, so determine loss for those
-        sent = test_sentences[i]
-#        if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
-#            # "module" is necessary when using DataParallel
-#            hidden = model.module.init_hidden(1) # number of parallel sentences being processed
-#        else:
+        if test_sentences:
+            sent = test_sentences[i]
         hidden = model.init_hidden(1) # number of parallel sentences being processed
         data, targets = test_get_batch(sent_ids)
         if args.view_layer >= 0:
@@ -437,9 +448,12 @@ def test_evaluate(test_sentences, data_source):
                 output_flat = output.view(-1, ntokens)
                 loss = criterion(output_flat, target)
                 total_loss += loss.item()
+                input_word = corpus.dictionary.idx2word[int(word_input.data)]
                 targ_word = corpus.dictionary.idx2word[int(target.data)]
                 nwords += 1
-                if targ_word != '<eos>':
+                if input_word != '<eos>': # not in (input_word,targ_word):
+                    if args.verbose_view_layer:
+                        print(input_word,end=" ")
                     # don't output <eos> markers to align with input
                     # output raw activations
                     if args.view_hidden:
@@ -451,7 +465,11 @@ def test_evaluate(test_sentences, data_source):
         else:
             data = data.unsqueeze(1) # only needed when a single sentence is being processed
             output, hidden = model(data, hidden)
-            output_flat = output.view(-1, ntokens)
+            try:
+                output_flat = output.view(-1, ntokens)
+            except RuntimeError:
+                print("Vocabulary Error! Most likely there weren't unks in training and unks are now needed for testing")
+                raise
             loss = criterion(output_flat, targets)
             total_loss += loss.item()
             if args.words:
@@ -459,7 +477,10 @@ def test_evaluate(test_sentences, data_source):
                 get_complexity(output_flat, targets, i)
             else:
                 # output sentence-level loss
-                print(str(sent)+":"+str(loss.item()))
+                if test_sentences:
+                    print(str(sent)+":"+str(loss.item()))
+                else:
+                    print(str(loss.item()))
 
             if args.adapt:
                 loss.backward()
@@ -488,10 +509,6 @@ def evaluate(data_source):
     model.eval()
     total_loss = 0.
     ntokens = len(corpus.dictionary)
-#    if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
-#        # "module" is necessary when using DataParallel
-#        hidden = model.module.init_hidden(args.batch_size)
-#    else:
     hidden = model.init_hidden(args.batch_size)
     with torch.no_grad():
         for i in range(0, data_source.size(0) - 1, args.bptt):
@@ -509,10 +526,6 @@ def train():
     total_loss = 0.
     start_time = time.time()
     ntokens = len(corpus.dictionary)
-    #if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
-        # "module" is necessary when using DataParallel
-    #    hidden = model.module.init_hidden(args.batch_size)
-    #else:
     hidden = model.init_hidden(args.batch_size)
     for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
         data, targets = get_batch(train_data, i)
@@ -556,9 +569,9 @@ if not args.test and not args.interact:
             train()
             val_loss = evaluate(val_data)
             print('-' * 89)
-            print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
+            print('| end of epoch {:3d} | time: {:5.2f}s | lr: {:4.8f} | '
                   'valid ppl {:8.2f}'.format(epoch, (time.time() - epoch_start_time),
-                                             val_loss, math.exp(val_loss)))
+                                             lr, math.exp(val_loss)))
             print('-' * 89)
             # Save the model if the validation loss is the best we've seen so far.
             if not best_val_loss or val_loss < best_val_loss:
@@ -593,12 +606,8 @@ else:
         # after load the rnn params are not a continuous chunk of memory
         # this makes them a continuous chunk, and will speed up forward pass
         if isinstance(model, torch.nn.DataParallel):
+            # if multi-gpu, access real model for testing
             model = model.module
-#        if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
-#            model.module.rnn.flatten_parameters()
-#        else:
-#            if isinstance(model, torch.nn.DataParallel):
-#                model = model.module
         model.rnn.flatten_parameters()
 
     # Run on test data.
@@ -639,7 +648,10 @@ else:
         except KeyboardInterrupt:
             print(' ')
     else:
-        test_loss = test_evaluate(test_sents, test_data)
+        if args.multisentence_test:
+            test_loss = test_evaluate(None, test_data)
+        else:
+            test_loss = test_evaluate(test_sents, test_data)
         if args.adapt:
             with open(args.adapted_model, 'wb') as f:
                 torch.save(model, f)

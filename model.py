@@ -8,7 +8,7 @@ class RNNModel(nn.Module):
     """Container module with an encoder, a recurrent module, and a decoder."""
 
     def __init__(self, rnn_type, ntoken, ninp, nhid, nlayers,
-                 embedding_file=None, dropout=0.5, tie_weights=False):
+                 embedding_file=None, dropout=0.5, tie_weights=False, freeze_embedding=False):
         super(RNNModel, self).__init__()
         self.drop = nn.Dropout(dropout)
         if embedding_file:
@@ -28,7 +28,10 @@ class RNNModel(nn.Module):
             self.rnn = nn.RNN(ninp, nhid, nlayers, nonlinearity=nonlinearity, dropout=dropout)
         self.decoder = nn.Linear(nhid, ntoken)
 
-        self.init_weights()
+        self.init_weights(freeze_embedding)
+        if freeze_embedding:
+            for param in self.encoder.parameters():
+                param.requires_grad = False
 
         # Optionally tie weights as in:
         # "Using the Output Embedding to Improve Language Models" (Press & Wolf 2017)
@@ -46,10 +49,11 @@ class RNNModel(nn.Module):
         self.nhid = nhid
         self.nlayers = nlayers
 
-    def init_weights(self):
+    def init_weights(self, freeze_embedding):
         """ Initialize encoder and decoder weights """
         initrange = 0.1
-        self.encoder.weight.data.uniform_(-initrange, initrange)
+        if not freeze_embedding:
+            self.encoder.weight.data.uniform_(-initrange, initrange)
         self.decoder.bias.data.fill_(0)
         self.decoder.weight.data.uniform_(-initrange, initrange)
 

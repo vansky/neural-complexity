@@ -34,17 +34,23 @@ class SentenceCorpus(object):
     """ Loads train/dev/test corpora and dictionary """
     def __init__(self, path, vocab_file, test_flag=False, interact_flag=False,
                  checkpoint_flag=False, predefined_vocab_flag=False, lower_flag=False,
-                 collapse_nums_flag=False,
+                 collapse_nums_flag=False,multisentence_test_flag=False,generate_flag=False,
                  trainfname='train.txt',
                  validfname='valid.txt',
                  testfname='test.txt'):
         self.lower = lower_flag
         self.collapse_nums = collapse_nums_flag
-        if not (test_flag or interact_flag or checkpoint_flag or predefined_vocab_flag):
+        if not (test_flag or interact_flag or checkpoint_flag or predefined_vocab_flag or generate_flag):
             # training mode
             self.dictionary = Dictionary()
             self.train = self.tokenize(os.path.join(path, trainfname))
             self.valid = self.tokenize_with_unks(os.path.join(path, validfname))
+            try:
+                # don't require a test set at train time,
+                # but if there is one, get a sense of whether unks will be required
+                self.test = self.tokenize_with_unks(os.path.join(path, testfname))
+            except:
+                pass
             self.save_dict(vocab_file)
         else:
             # load pretrained model
@@ -55,7 +61,10 @@ class SentenceCorpus(object):
                 self.load_dict(vocab_file)
             if test_flag:
                 # test mode
-                self.test = self.sent_tokenize_with_unks(os.path.join(path, testfname))
+                if multisentence_test_flag:
+                    self.test = self.tokenize_with_unks(os.path.join(path, testfname))
+                else:
+                    self.test = self.sent_tokenize_with_unks(os.path.join(path, testfname))
             elif checkpoint_flag or predefined_vocab_flag:
                 # load from a checkpoint
                 self.train = self.tokenize_with_unks(os.path.join(path, trainfname))
@@ -78,7 +87,7 @@ class SentenceCorpus(object):
 
     def load_dict(self, path):
         """ Loads dictionary from disk """
-        assert os.path.exists(path)
+        assert os.path.exists(path), "Bad path: %s" % path
         if path[-3:] == 'bin':
             # This check actually seems to be faster than passing in a binary flag
             # Assume dict is binarized
@@ -97,7 +106,7 @@ class SentenceCorpus(object):
 
     def tokenize(self, path):
         """ Tokenizes a text file. """
-        assert os.path.exists(path)
+        assert os.path.exists(path), "Bad path: %s" % path
         # Add words to the dictionary
         if path[-2:] == 'gz':
             with gzip.open(path, 'rb') as file_handle:
@@ -217,7 +226,7 @@ class SentenceCorpus(object):
 
     def tokenize_with_unks(self, path):
         """ Tokenizes a text file, adding unks if needed. """
-        assert os.path.exists(path)
+        assert os.path.exists(path), "Bad path: %s" % path
         if path[-2:] == 'gz':
             # Determine the length of the corpus
             with gzip.open(path, 'rb') as file_handle:
@@ -326,7 +335,7 @@ class SentenceCorpus(object):
 
     def sent_tokenize_with_unks(self, path):
         """ Tokenizes a text file into sentences, adding unks if needed. """
-        assert os.path.exists(path)
+        assert os.path.exists(path), "Bad path: %s" % path
         all_ids = []
         sents = []
         if path[-2:] == 'gz':
