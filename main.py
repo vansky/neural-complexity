@@ -233,12 +233,11 @@ if not args.test and not args.interact:
  #   if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
  #       model.module.rnn.flatten_parameters()
  #   else:
+    if args.cuda and (not args.single) and (torch.cuda.device_count() > 1):
+        # Scatters minibatches (in dim=1) across available GPUs
+        model = nn.DataParallel(model, dim=1)
     if isinstance(model, torch.nn.DataParallel):
         model = model.module
-    elif args.cuda:
-        if (not args.single) and (torch.cuda.device_count() > 1):
-            # Scatters minibatches (in dim=1) across available GPUs
-            model = nn.DataParallel(model, dim=1)
     model.rnn.flatten_parameters()
 
 criterion = nn.CrossEntropyLoss()
