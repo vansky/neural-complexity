@@ -101,6 +101,11 @@ parser.add_argument('--adapt', action='store_true',
                     help='adapt model weights during evaluation')
 parser.add_argument('--interact', action='store_true',
                     help='run a trained network interactively')
+
+#For getting embeddings
+parser.add_argument('--view_emb', action='store_true',
+                    help='output the word embedding rather than the cell state')
+
 parser.add_argument('--view_layer', type=int, default=-1,
                     help='which layer should output cell states')
 parser.add_argument('--view_hidden', action='store_true',
@@ -459,6 +464,13 @@ def test_evaluate(test_sentences, data_source):
                     if args.view_hidden:
                         # output hidden state
                         print(*list(hidden[0][args.view_layer].view(1, -1).data.cpu().numpy().flatten()), sep=' ')
+
+                    elif args.view_emb:
+                        #Get embedding for input word
+                        emb = model.encoder(word_input)
+                        # output embedding
+                        print(*list(emb[0].view(1,-1).data.cpu().numpy().flatten()), sep=' ')
+
                     else:
                         # output cell state
                         print(*list(hidden[1][args.view_layer].view(1, -1).data.cpu().numpy().flatten()), sep=' ')
