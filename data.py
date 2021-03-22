@@ -144,7 +144,7 @@ class SentenceCorpus(object):
 
             # Tokenize file content
             with gzip.open(path, 'rb') as file_handle:
-                ids = torch.LongTensor(tokens)
+                ids = torch.IntTensor(tokens)
                 token = 0
                 first_flag = True
                 for fchunk in file_handle.readlines():
@@ -201,7 +201,7 @@ class SentenceCorpus(object):
 
             # Tokenize file content
             with open(path, 'r') as file_handle:
-                ids = torch.LongTensor(tokens)
+                ids = torch.IntTensor(tokens)
                 token = 0
                 first_flag = True
                 for fchunk in file_handle:
@@ -252,7 +252,7 @@ class SentenceCorpus(object):
 
             # Tokenize file content
             with gzip.open(path, 'rb') as file_handle:
-                ids = torch.LongTensor(tokens)
+                ids = torch.IntTensor(tokens)
                 token = 0
                 first_flag = True
                 for fchunk in file_handle.readlines():
@@ -304,7 +304,7 @@ class SentenceCorpus(object):
 
             # Tokenize file content
             with open(path, 'r') as file_handle:
-                ids = torch.LongTensor(tokens)
+                ids = torch.IntTensor(tokens)
                 token = 0
                 first_flag = True
                 for fchunk in file_handle:
@@ -384,7 +384,7 @@ class SentenceCorpus(object):
             tokens = len(words)
 
         # Tokenize file content
-        ids = torch.LongTensor(tokens)
+        ids = torch.IntTensor(tokens)
         token = 0
         if self.lower:
             for word in words:
