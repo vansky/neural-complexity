@@ -39,19 +39,33 @@ parser.add_argument('--cuda', action='store_true',
 
 # Data parameters
 parser.add_argument('--model_file', type=str, default='model.pt',
-                    help='path to save the final model')
+                    help='path to model')
+
+parser.add_argument('--vocab_file', type=str, default='vocab.txt',
+                    help='path to vocab_file')
 
 args = parser.parse_args()
 
 if torch.cuda.is_available():
     if not args.cuda:
-        print("WARNING: You have a CUDA device, so you should probably run with --cuda")
+        sys.stderr.write("WARNING: You have a CUDA device, so you should probably run with --cuda\n")
     else:
-        torch.cuda.manual_seed(args.seed)
+        #torch.cuda.manual_seed(args.seed)
         if torch.cuda.device_count() == 1:
             args.single = True
 
 device = torch.device("cuda" if args.cuda else "cpu")
+
+###############################################################################
+# Load the vocab
+###############################################################################
+idx2word = {}
+with open(args.vocab_file, 'r') as f:
+    idx = 0
+    for line in f:
+        line = line.strip()
+        idx2word[idx] = line
+        idx += 1
 
 ###############################################################################
 # Load the model
@@ -74,5 +88,8 @@ with open(args.model_file, 'rb') as f:
     # this makes them a continuous chunk, and will speed up forward pass
     model.rnn.flatten_parameters()
 
-for word in model.encoder(torch.LongTensor([w for w in range(model.encoder.num_embeddings)])).data.numpy().tolist():
-    print(' '.join(str(f) for f in word))
+#print(model.encoder(torch.LongTensor([w for w in range(model.encoder.num_embeddings)])))
+for idx, embed in enumerate(model.encoder(torch.LongTensor([w for w in range(model.encoder.num_embeddings)])).data.numpy().tolist()):
+    word = idx2word[idx]
+
+    print(word+' '+' '.join(str(f) for f in embed))
