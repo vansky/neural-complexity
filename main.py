@@ -451,7 +451,7 @@ def test_evaluate(test_sentences, data_source):
                 target = targets[word_index].unsqueeze(0)
                 output, hidden = model(word_input, hidden)
                 output_flat = output.view(-1, ntokens)
-                loss = criterion(output_flat, target)
+                loss = criterion(output_flat, target.long())
                 total_loss += loss.item()
                 input_word = corpus.dictionary.idx2word[int(word_input.data)]
                 targ_word = corpus.dictionary.idx2word[int(target.data)]
@@ -482,7 +482,7 @@ def test_evaluate(test_sentences, data_source):
             except RuntimeError:
                 print("Vocabulary Error! Most likely there weren't unks in training and unks are now needed for testing")
                 raise
-            loss = criterion(output_flat, targets)
+            loss = criterion(output_flat, targets.long())
             total_loss += loss.item()
             if args.words:
                 # output word-level complexity metrics
@@ -527,7 +527,7 @@ def evaluate(data_source):
             data, targets = get_batch(data_source, i)
             output, hidden = model(data, hidden)
             output_flat = output.view(-1, ntokens)
-            total_loss += len(data) * criterion(output_flat, targets).item()
+            total_loss += len(data) * criterion(output_flat, targets.long()).item()
             hidden = repackage_hidden(hidden)
     return total_loss / len(data_source)
 
@@ -546,7 +546,7 @@ def train():
         hidden = repackage_hidden(hidden)
         model.zero_grad()
         output, hidden = model(data, hidden)
-        loss = criterion(output.view(-1, ntokens), targets)
+        loss = criterion(output.view(-1, ntokens), targets.long())
         loss.backward()
 
         # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.

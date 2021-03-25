@@ -1,19 +1,15 @@
 # Neural complexity
 A neural language model that computes various information-theoretic processing complexity measures (e.g., surprisal) for each word given the preceding context. Also, it can function as an adaptive language model ([van Schijndel and Linzen, 2018](http://aclweb.org/anthology/D18-1499)) which adapts to test domains.
 
+**Note**: Recent updates remove dependencies but break compatibility with pre-2021 models. To use older models, use version 1.1.0: `git checkout tags/v1.1.0`
+
 ### Dependencies
 Requires the following python packages (available through pip):
-* [pytorch](https://pytorch.org/) v1.0.0
-* nltk
+* [pytorch](https://pytorch.org/)
 
 The following python packages are optional:
 * progress
 * dill (to handle binarized vocabularies)
-
-Requires the `punkt` nltk module. Install it from within python:
-
-    import nltk
-    nltk.download('punkt')  
 
 ### Quick Usage
 The below all use GPUs. To use CPUs instead, omit the `--cuda` flag.
