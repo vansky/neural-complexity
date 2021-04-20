@@ -103,16 +103,19 @@ These parameters specify runtime options for using the model
 ### Pre-trained models
 
 This code should be compatible with pre-trained pytorch LSTMs (be sure to use `git checkout tags/v1.1.0`).
-Here are a few different options depending on what you need:  
+Here are a few different options depending on what you need (Email me if you'd like me to add your LSTM releases here):  
 * 125 English Wiki LSTMs (2m,10m,20m,40m,80m tokens; 25 models each)  
  [van Schijndel et al (2019) "Quantity doesn’t buy quality syntax with neural language models"](https://www.aclweb.org/anthology/D19-1592)  
 https://zenodo.org/record/3559340
 * 5 models of Wiki English and 5 models of Spanish Wiki (80m tokens)  
 [Davis and van Schijndel (2020) "RNN LMs Always Learn English-Like RC Attachment"](https://www.aclweb.org/anthology/2020.acl-main.179/)  
 https://zenodo.org/record/3778994
-* 5 models of discourse-intact English Wiki LSTMs (as opposed to the more standard isolated-sentence LSTMs found in the other releases; 80m tokens)  
+* 5 models of discourse-intact English Wiki LSTMs (as opposed to the more standard isolated-sentence LSTMs found in most other releases; 80m tokens)  
 [Davis and van Schijndel (2020) "Interaction with Context During RNN Sentence Processing"](https://psyarxiv.com/8r65d/)  
 https://github.com/forrestdavis/GardenPath/tree/master/models/ordered
+* 25 English Wiki and 25 English OpenWebText discourse-intact LSTMs  
+[Davis and Altmann (2021) "Finding event structure in time: What recurrent neural networks can tell us about event structure in mind"](https://www.sciencedirect.com/science/article/abs/pii/S0010027721000706)  
+https://zenodo.org/record/4053572
 * 1 model for each of English, Hebrew, Russian, and Italian Wiki (80m tokens)  
 [Gulordava et al (2018) "Colorless Green Recurrent Networks Dream Hierarchically"](https://www.aclweb.org/anthology/N18-1108/)  
 https://github.com/facebookresearch/colorlessgreenRNNs/tree/master/data
