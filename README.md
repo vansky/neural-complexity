@@ -100,6 +100,24 @@ These parameters specify runtime options for using the model
     --guessprobs: If present, output guess probabilities along with each guess (default: absent)  
     --complexn [INT]: Compute complexity over best N guesses instead of over full vocab (default: 0 aka full vocab)  
 
+### Pre-trained models
+
+This code should be compatible with pre-trained pytorch LSTMs (be sure to use `git checkout tags/v1.1.0`).
+Here are a few different options depending on what you need:  
+* 125 English Wiki LSTMs (2m,10m,20m,40m,80m tokens; 25 models each)  
+ [van Schijndel et al (2019) "Quantity doesn’t buy quality syntax with neural language models"](https://www.aclweb.org/anthology/D19-1592)  
+https://zenodo.org/record/3559340
+* 5 models of Wiki English and 5 models of Spanish Wiki (80m tokens)  
+[Davis and van Schijndel (2020) "RNN LMs Always Learn English-Like RC Attachment"](https://www.aclweb.org/anthology/2020.acl-main.179/)  
+https://zenodo.org/record/3778994
+* 5 models of discourse-intact English Wiki LSTMs (as opposed to the more standard isolated-sentence LSTMs found in the other releases; 80m tokens)  
+[Davis and van Schijndel (2020) "Interaction with Context During RNN Sentence Processing"](https://psyarxiv.com/8r65d/)  
+https://github.com/forrestdavis/GardenPath/tree/master/models/ordered
+* 1 model for each of English, Hebrew, Russian, and Italian Wiki (80m tokens)  
+[Gulordava et al (2018) "Colorless Green Recurrent Networks Dream Hierarchically"](https://www.aclweb.org/anthology/N18-1108/)  
+https://github.com/facebookresearch/colorlessgreenRNNs/tree/master/data
+
+
 ### References
 
 Marten van Schijndel and Tal Linzen. ["A Neural Model of Adaptation in Reading."](http://aclweb.org/anthology/D18-1499) In 2018 Conference on Empirical Methods in Natural Language Processing (EMNLP 2018). 2018.
