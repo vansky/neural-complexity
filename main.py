@@ -387,8 +387,8 @@ def get_batch(source, i):
     by the batchify function. The chunks are along dimension 0, corresponding
     to the seq_len dimension in the LSTM. """
     seq_len = min(args.bptt, len(source) - 1 - i)
-    data = source[i:i+seq_len].long()
-    target = source[i+1:i+1+seq_len].view(-1).long()
+    data = source[i:i+seq_len]
+    target = source[i+1:i+1+seq_len].view(-1)
     return data, target
 
 def test_get_batch(source):
