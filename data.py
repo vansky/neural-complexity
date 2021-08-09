@@ -42,6 +42,7 @@ class SentenceCorpus(object):
                  trainfname='train.txt',
                  validfname='valid.txt',
                  testfname='test.txt'):
+
         self.lower = lower_flag
         self.collapse_nums = collapse_nums_flag
         if not (test_flag or interact_flag or checkpoint_flag or predefined_vocab_flag or generate_flag):
@@ -74,6 +75,9 @@ class SentenceCorpus(object):
                 self.train = self.tokenize_with_unks(os.path.join(path, trainfname))
                 self.valid = self.tokenize_with_unks(os.path.join(path, validfname))
 
+
+    def __len__(self):
+        return len(self.dictionary)
 
     def save_dict(self, path):
         """ Saves dictionary to disk """
@@ -376,6 +380,7 @@ class SentenceCorpus(object):
         ids = self.convert_to_ids(words)
         all_ids.append(ids)
         return (sents, all_ids)
+
 
     def convert_to_ids(self, words, tokens=None):
         if tokens is None:
