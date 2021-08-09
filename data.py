@@ -43,9 +43,6 @@ class SentenceCorpus(object):
                  validfname='valid.txt',
                  testfname='test.txt'):
 
-        #for parity with pipeline using hugging face transformers (setting maximum input length)
-        self.model_max_length = int(1e30)
-
         self.lower = lower_flag
         self.collapse_nums = collapse_nums_flag
         if not (test_flag or interact_flag or checkpoint_flag or predefined_vocab_flag or generate_flag):
@@ -413,71 +410,3 @@ class SentenceCorpus(object):
                     ids[token] = self.dictionary.word2idx[word]
                 token += 1
         return(ids)
-
-    #############################################
-    #This is supposed to loosely 
-    #parallel hugging face's transformers
-    #library. Currently validated for 
-    #transformers==4.5.1 (probably works on 3/4)
-    #############################################
-    def __call__(self, line, return_tensors=None):
-
-        if return_tensors=='pt':
-            return {'input_ids': torch.tensor(self.encode(line), dtype=torch.int64).unsqueeze(0), 
-                    'attention_mask': torch.tensor([])}
-        elif return_tensors is None:
-            return {'input_ids': self.encode(line), 
-                    'attention_mask': []}
-        else:
-            sys.stderr.write('I have not implemented a return_tensors type: '+str(return_tensors)+'\n')
-            sys.exit(1)
-
-    #also trying to mimic aspects of huggingface
-    def encode(self, line, add_space_before_punct_symbol=True, lower=True,
-            remove_trailing_spaces=True):
-
-        if lower:
-            line = line.lower()
-
-        if remove_trailing_spaces:
-            line = line.strip()
-
-        if add_space_before_punct_symbol:
-            punct = "!\"#$%&'()*+,./:;-<=>?@[\]^_`{|}~"
-            #add space before punct
-            line = line.translate(str.maketrans({key: " {0}".format(key) for key in punct}))
-
-            #break things like "farm-house" into "farm - house" and "and/or" into "and / or" careful here
-            punct = "/-"
-            #add space before punct
-            line = line.translate(str.maketrans({key: "{0} ".format(key) for key in punct}))
-
-            #remove double spaces
-            line = re.sub('\s{2,}', ' ', line)
-
-        sentences = sent_tokenize(line)
-        output = []
-        for x, sent in enumerate(sentences):
-            sent = sent.split(' ')
-            if x == 0:
-                sent = ['<eos>'] + sent
-
-            #imagine we add a word is this really a sentence
-            #If it's a sentence then sent_tokenize will 
-            #generate two sentences
-            #A bit hacky but it helps in parity with huggingface
-            test_sent = ' '.join(sent + ['the'])
-            if len(sent_tokenize(test_sent)) != 1:
-                sent = sent + ['<eos>']
-
-            output += list(self.convert_to_ids(sent).data.numpy())
-        return output
-
-    #for parity with huggingface
-    def convert_ids_to_tokens(self, ids):
-        return self.decode(ids)
-
-    #for parity with huggingface
-    def decode(self, ids):
-        words = list(map(lambda x: self.dictionary.idx2word[x], ids))
-        return words
