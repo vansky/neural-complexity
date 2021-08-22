@@ -89,17 +89,18 @@ class Tokenizer(SentenceCorpus):
             return_inputs['attention_mask'].append(encoded['attention_mask'])
 
         if padding:
+            assert self.pad_token_id is not None, 'Attempting to PAD with no token'
             max_seq_len = max(len(input_ids) for input_ids in return_inputs['input_ids'])
-            print(max_seq_len)
-            padded_batch_outputs = {}
-            for i in range(len(return_inputs)):
-                inputs = dict((k, v[i]) for k, v in return_inputs.items())
+            padded_batch_outputs = {'input_ids': [], 'attention_mask': []}
+            for i in range(len(return_inputs['input_ids'])):
+                inputs = return_inputs['input_ids'][i]
+                attn = return_inputs['attention_mask'][i]
+                inputs = {'input_ids':inputs, 'attention_mask': attn}
+
                 outputs = self._pad(inputs, max_seq_len)
 
-                for key, value in outputs.items():
-                    if key not in padded_batch_outputs:
-                        padded_batch_outputs[key] = []
-                    padded_batch_outputs[key].append(value)
+                padded_batch_outputs['input_ids'].append(outputs['input_ids'])
+                padded_batch_outputs['attention_mask'].append(outputs['attention_mask'])
 
             return_inputs = padded_batch_outputs
 
@@ -186,17 +187,3 @@ class Tokenizer(SentenceCorpus):
         if token in self.dictionary.word2idx:
             return self.dictionary.word2idx[token]
         return self.unk_token_id
-
-
-if __name__ == "__main__":
-    tokenizer = Tokenizer('finetuned/wikitext_103_vocab')
-
-    tokenizer.pad_token = tokenizer.eos_token
-
-    sents = ['the man is happy', 'the woman ran outside yesterday']
-    encoding = tokenizer.batch_encode_plus(sents, padding=True, return_tensors='pt')
-    #encoding = tokenizer.batch_encode_plus(sents, padding=False)
-    print(encoding)
-
-
-
