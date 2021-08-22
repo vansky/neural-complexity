@@ -52,6 +52,8 @@ parser.add_argument('--epochs', type=int, default=40,
                     help='upper epoch limit')
 parser.add_argument('--batch_size', type=int, default=20, metavar='N',
                     help='batch size')
+parser.add_argument('--grad_accumulation_steps', type=int, default=1,
+                    help='accumulates gradients over N sub-batches to avoid out of memory errors')
 parser.add_argument('--bptt', type=int, default=35,
                     help='sequence length')
 parser.add_argument('--dropout', type=float, default=0.2,
@@ -258,6 +260,9 @@ if not args.test and not args.interact:
     # after load the rnn params are not a continuous chunk of memory
     # this makes them a continuous chunk, and will speed up forward pass
     model.rnn.flatten_parameters()
+    # setup model with optimizer and scheduler
+    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, nesterov=True)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',patience=0,factor=0.1)
 
 criterion = nn.CrossEntropyLoss()
 
@@ -441,6 +446,7 @@ def test_evaluate(test_sentences, data_source):
             sent = test_sentences[i]
         hidden = model.init_hidden(1) # number of parallel sentences being processed
         data, targets = test_get_batch(sent_ids)
+        nwords += targets.flatten().size(0)
         if args.view_layer >= 0:
             for word_index in range(data.size(0)):
                 # Starting each batch, detach the hidden state
@@ -455,7 +461,6 @@ def test_evaluate(test_sentences, data_source):
                 total_loss += loss.item()
                 input_word = corpus.dictionary.idx2word[int(word_input.data)]
                 targ_word = corpus.dictionary.idx2word[int(target.data)]
-                nwords += 1
                 if input_word != '<eos>': # not in (input_word,targ_word):
                     if args.verbose_view_layer:
                         print(input_word,end=" ")
@@ -499,21 +504,15 @@ def test_evaluate(test_sentences, data_source):
 
                 # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
                 torch.nn.utils.clip_grad_norm(model.parameters(), args.clip)
-                for param in model.parameters():
-                    if param.grad is not None:
-                    # only update trainable parameters
-                        param.data.add_(-lr, param.grad.data)
-
-        hidden = repackage_hidden(hidden)
+                optimizer.step()
+                hidden = repackage_hidden(hidden)
+                model.zero_grad()
 
         if PROGRESS:
             bar.next()
     if PROGRESS:
         bar.finish()
-    if args.view_layer >= 0:
-        return total_loss / nwords
-    else:
-        return total_loss / len(data_source)
+    return total_loss / nwords
 
 def evaluate(data_source):
     """ Evaluate for validation (no adaptation, no complexity output) """
@@ -521,55 +520,70 @@ def evaluate(data_source):
     model.eval()
     total_loss = 0.
     ntokens = len(corpus.dictionary)
-    hidden = model.init_hidden(args.batch_size)
+#    hidden = model.init_hidden(args.batch_size)
     with torch.no_grad():
+        actual_batch_size = int(args.batch_size / args.grad_accumulation_steps)
+        # Construct hidden layers for each sub-batch
+        hidden_batch = []
+        for i in range(args.grad_accumulation_steps):
+            hidden_batch.append(model.init_hidden(actual_batch_size))
+            
         for i in range(0, data_source.size(0) - 1, args.bptt):
-            data, targets = get_batch(data_source, i)
-            output, hidden = model(data, hidden)
-            output_flat = output.view(-1, ntokens)
-            total_loss += len(data) * criterion(output_flat, targets.long()).item()
-            hidden = repackage_hidden(hidden)
-    return total_loss / len(data_source)
+            batch_data, batch_targets = get_batch(data_source, i)
+            for sub_batch_ix in range(args.grad_accumulation_steps):
+                sub_batch_start = sub_batch_ix * actual_batch_size
+                sub_batch_end = (sub_batch_ix + 1) * actual_batch_size
+                output, hidden_batch[sub_batch_ix] = model(batch_data[:,sub_batch_start:sub_batch_end,...], hidden_batch[sub_batch_ix])
+                output_flat = output.view(-1, ntokens)
+                total_loss += len(data) * criterion(output_flat, batch_targets[:,sub_batch_start:sub_batch_end,...].flatten()).item()
+    return total_loss / data_source.flatten().size(0)
 
 def train():
     """ Train language model """
     # Turn on training mode which enables dropout.
     model.train()
     total_loss = 0.
+    total_data = 0.
     start_time = time.time()
     ntokens = len(corpus.dictionary)
-    hidden = model.init_hidden(args.batch_size)
+    actual_batch_size = int(args.batch_size / args.grad_accumulation_steps)
+    hidden_batch = []
+    for i in range(args.grad_accumulation_steps):
+        hidden_batch.append(model.init_hidden(actual_batch_size))
+        
     for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
-        data, targets = get_batch(train_data, i)
-        # Starting each batch, we detach the hidden state from how it was previously produced.
-        # If we didn't, the model would try backpropagating all the way to start of the dataset.
-        hidden = repackage_hidden(hidden)
-        model.zero_grad()
-        output, hidden = model(data, hidden)
-        loss = criterion(output.view(-1, ntokens), targets.long())
-        loss.backward()
-
+        batch_data, batch_targets = get_batch(train_data, i)
+        for sub_batch_ix in range(args.grad_accumulation_steps):
+            sub_batch_start = sub_batch_ix * actual_batch_size
+            sub_batch_end = (sub_batch_ix + 1) * actual_batch_size
+            output, hidden_batch[sub_batch_ix] = model(batch_data[:,sub_batch_start:sub_batch_end,...], hidden_batch[sub_batch_ix])
+            loss = criterion(output.view(-1, ntokens), batch_targets[:,sub_batch_start:sub_batch_end,...].flatten())
+            loss.backward()
+            total_loss += loss.item()
+        total_data += batch_data.flatten().size(0)
+        
         # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
         torch.nn.utils.clip_grad_norm(model.parameters(), args.clip)
-        for param in model.parameters():
-            if param.grad is not None:
-                # only update trainable parameters
-                param.data.add_(-lr, param.grad.data)
+        optimizer.step()
 
-        total_loss += loss.item()
+        # Detach the hidden state from how it was previously produced.
+        # If we didn't, the model would try backpropagating all the way to start of the dataset.
+        for sub_batch_ix in range(args.grad_accumulation_steps):
+            hidden_batch[sub_batch_ix] = repackage_hidden(hidden_batch[sub_batch_ix])
+        model.zero_grad()
 
         if batch % args.log_interval == 0 and batch > 0:
-            cur_loss = total_loss / args.log_interval
+            curr_loss = total_loss / total_data
             elapsed = time.time() - start_time
             print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.2f} | ms/batch {:5.2f} | '
                   'loss {:5.2f} | ppl {:8.2f}'.format(
-                      epoch, batch, len(train_data) // args.bptt, lr,
-                      elapsed * 1000 / args.log_interval, cur_loss, math.exp(cur_loss)))
+                      epoch, batch, len(train_data) // args.bptt, float(optimizer.param_groups[0]['lr']),
+                      elapsed * 1000 / args.log_interval, curr_loss, math.exp(curr_loss)))
             total_loss = 0.
+            total_data = 0.
             start_time = time.time()
 
 # Loop over epochs.
-lr = args.lr
 best_val_loss = None
 no_improvement = 0
 
@@ -583,8 +597,9 @@ if not args.test and not args.interact:
             print('-' * 89)
             print('| end of epoch {:3d} | time: {:5.2f}s | lr: {:4.8f} | '
                   'valid ppl {:8.2f}'.format(epoch, (time.time() - epoch_start_time),
-                                             lr, math.exp(val_loss)))
+                                             float(optimizer.param_groups[0]['lr']), math.exp(val_loss)))
             print('-' * 89)
+            
             # Save the model if the validation loss is the best we've seen so far.
             if not best_val_loss or val_loss < best_val_loss:
                 no_improvement = 0
@@ -597,7 +612,7 @@ if not args.test and not args.interact:
                 if no_improvement >= 3:
                     print('Covergence achieved! Ending training early')
                     break
-                lr /= 4.0
+            scheduler.step(val_loss)
     except KeyboardInterrupt:
         print('-' * 89)
         print('Exiting from training early')
@@ -621,6 +636,10 @@ else:
             # if multi-gpu, access real model for testing
             model = model.module
         model.rnn.flatten_parameters()
+        
+        # setup model with optimizer and scheduler
+        optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, nesterov=True)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',patience=0,factor=0.1)
 
     # Run on test data.
     if args.interact:
@@ -660,6 +679,8 @@ else:
         except KeyboardInterrupt:
             print(' ')
     else:
+        if not args.adapt:
+            torch.set_grad_enabled(False)
         if args.multisentence_test:
             test_loss = test_evaluate(None, test_data)
         else:
