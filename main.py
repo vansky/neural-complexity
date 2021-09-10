@@ -393,7 +393,7 @@ def get_batch(source, i):
     to the seq_len dimension in the LSTM. """
     seq_len = min(args.bptt, len(source) - 1 - i)
     data = source[i:i+seq_len]
-    target = source[i+1:i+1+seq_len].view(-1)
+    target = source[i+1:i+1+seq_len]
     return data, target
 
 def test_get_batch(source):
@@ -533,9 +533,9 @@ def evaluate(data_source):
             for sub_batch_ix in range(args.grad_accumulation_steps):
                 sub_batch_start = sub_batch_ix * actual_batch_size
                 sub_batch_end = (sub_batch_ix + 1) * actual_batch_size
-                output, hidden_batch[sub_batch_ix] = model(batch_data[:,sub_batch_start:sub_batch_end,...], hidden_batch[sub_batch_ix])
+                output, hidden_batch[sub_batch_ix] = model(batch_data[:,sub_batch_start:sub_batch_end], hidden_batch[sub_batch_ix])
                 output_flat = output.view(-1, ntokens)
-                total_loss += len(data) * criterion(output_flat, batch_targets[:,sub_batch_start:sub_batch_end,...].flatten()).item()
+                total_loss += len(data) * criterion(output_flat, batch_targets[:,sub_batch_start:sub_batch_end].flatten()).item()
     return total_loss / data_source.flatten().size(0)
 
 def train():
@@ -556,8 +556,8 @@ def train():
         for sub_batch_ix in range(args.grad_accumulation_steps):
             sub_batch_start = sub_batch_ix * actual_batch_size
             sub_batch_end = (sub_batch_ix + 1) * actual_batch_size
-            output, hidden_batch[sub_batch_ix] = model(batch_data[:,sub_batch_start:sub_batch_end,...], hidden_batch[sub_batch_ix])
-            loss = criterion(output.view(-1, ntokens), batch_targets[:,sub_batch_start:sub_batch_end,...].flatten())
+            output, hidden_batch[sub_batch_ix] = model(batch_data[:,sub_batch_start:sub_batch_end], hidden_batch[sub_batch_ix])
+            loss = criterion(output.view(-1, ntokens), batch_targets[:,sub_batch_start:sub_batch_end].flatten())
             loss.backward()
             total_loss += loss.item()
         total_data += batch_data.flatten().size(0)
