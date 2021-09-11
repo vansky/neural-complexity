@@ -394,14 +394,14 @@ def get_batch(source, i):
     seq_len = min(args.bptt, len(source) - 1 - i)
     data = source[i:i+seq_len]
     target = source[i+1:i+1+seq_len]
-    return data, target
+    return data, target.long()
 
 def test_get_batch(source):
     """ Creates an input/target pair for evaluation """
     seq_len = len(source) - 1
     data = source[:seq_len]
     target = source[1:1+seq_len].view(-1)
-    return data, target
+    return data, target.long()
 
 def test_evaluate(test_sentences, data_source):
     """ Evaluate at test time (with adaptation, complexity output) """
@@ -457,7 +457,7 @@ def test_evaluate(test_sentences, data_source):
                 target = targets[word_index].unsqueeze(0)
                 output, hidden = model(word_input, hidden)
                 output_flat = output.view(-1, ntokens)
-                loss = criterion(output_flat, target.long())
+                loss = criterion(output_flat, target)
                 total_loss += loss.item()
                 input_word = corpus.dictionary.idx2word[int(word_input.data)]
                 targ_word = corpus.dictionary.idx2word[int(target.data)]
@@ -487,7 +487,7 @@ def test_evaluate(test_sentences, data_source):
             except RuntimeError:
                 print("Vocabulary Error! Most likely there weren't unks in training and unks are now needed for testing")
                 raise
-            loss = criterion(output_flat, targets.long())
+            loss = criterion(output_flat, targets)
             total_loss += loss.item()
             if args.words:
                 # output word-level complexity metrics
