@@ -264,7 +264,7 @@ if not args.test and not args.interact:
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, nesterov=True)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',patience=0,factor=0.1)
 
-criterion = nn.CrossEntropyLoss()
+criterion = nn.CrossEntropyLoss(reduction='none')
 
 ###############################################################################
 # Complexity measures
@@ -458,7 +458,7 @@ def test_evaluate(test_sentences, data_source):
                 output, hidden = model(word_input, hidden)
                 output_flat = output.view(-1, ntokens)
                 loss = criterion(output_flat, target)
-                total_loss += loss.item()
+                total_loss += loss.sum().item()
                 input_word = corpus.dictionary.idx2word[int(word_input.data)]
                 targ_word = corpus.dictionary.idx2word[int(target.data)]
                 if input_word != '<eos>': # not in (input_word,targ_word):
@@ -488,7 +488,7 @@ def test_evaluate(test_sentences, data_source):
                 print("Vocabulary Error! Most likely there weren't unks in training and unks are now needed for testing")
                 raise
             loss = criterion(output_flat, targets)
-            total_loss += loss.item()
+            total_loss += loss.sum().item()
             if args.words:
                 # output word-level complexity metrics
                 get_complexity(output_flat, targets, i)
@@ -500,7 +500,7 @@ def test_evaluate(test_sentences, data_source):
                     print(str(loss.item()))
 
             if args.adapt:
-                loss.backward()
+                loss.mean().backward()
 
                 # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
                 torch.nn.utils.clip_grad_norm(model.parameters(), args.clip)
@@ -520,7 +520,6 @@ def evaluate(data_source):
     model.eval()
     total_loss = 0.
     ntokens = len(corpus.dictionary)
-#    hidden = model.init_hidden(args.batch_size)
     with torch.no_grad():
         actual_batch_size = int(args.batch_size / args.grad_accumulation_steps)
         # Construct hidden layers for each sub-batch
@@ -535,7 +534,7 @@ def evaluate(data_source):
                 sub_batch_end = (sub_batch_ix + 1) * actual_batch_size
                 output, hidden_batch[sub_batch_ix] = model(batch_data[:,sub_batch_start:sub_batch_end], hidden_batch[sub_batch_ix])
                 output_flat = output.view(-1, ntokens)
-                total_loss += len(data) * criterion(output_flat, batch_targets[:,sub_batch_start:sub_batch_end].flatten()).item()
+                total_loss += criterion(output_flat, batch_targets[:,sub_batch_start:sub_batch_end].flatten()).sum().item()
     return total_loss / data_source.flatten().size(0)
 
 def train():
@@ -557,9 +556,10 @@ def train():
             sub_batch_start = sub_batch_ix * actual_batch_size
             sub_batch_end = (sub_batch_ix + 1) * actual_batch_size
             output, hidden_batch[sub_batch_ix] = model(batch_data[:,sub_batch_start:sub_batch_end], hidden_batch[sub_batch_ix])
+            
             loss = criterion(output.view(-1, ntokens), batch_targets[:,sub_batch_start:sub_batch_end].flatten())
-            loss.backward()
-            total_loss += loss.item()
+            total_loss += loss.sum().item()
+            loss.mean().backward()
         total_data += batch_data.flatten().size(0)
         
         # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
