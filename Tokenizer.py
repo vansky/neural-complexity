@@ -166,6 +166,8 @@ class Tokenizer(SentenceCorpus):
         return output
 
     def convert_ids_to_tokens(self, ids):
+        if type(ids) != list:
+            ids = [ids]
         return self.decode(ids)
 
     def decode(self, ids):
