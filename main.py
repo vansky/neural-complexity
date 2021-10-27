@@ -104,7 +104,7 @@ parser.add_argument('--adapt', action='store_true',
 parser.add_argument('--interact', action='store_true',
                     help='run a trained network interactively')
 
-#For getting embeddings
+# For getting embeddings
 parser.add_argument('--view_emb', action='store_true',
                     help='output the word embedding rather than the cell state')
 
@@ -133,10 +133,8 @@ parser.add_argument('--guess', action='store_true',
                     help='display best guesses at each time step')
 parser.add_argument('--guessn', type=int, default=1,
                     help='output top n guesses')
-parser.add_argument('--guessscores', action='store_true',
-                    help='display guess scores along with guesses')
-parser.add_argument('--guessratios', action='store_true',
-                    help='display guess ratios normalized by best guess')
+parser.add_argument('--guesssurps', action='store_true',
+                    help='display guess surps along with guesses')
 parser.add_argument('--guessprobs', action='store_true',
                     help='display guess probs along with guesses')
 parser.add_argument('--complexn', type=int, default=0,
@@ -308,29 +306,10 @@ def get_surps(state):
     logprobs = nn.functional.log_softmax(beam, dim=0)
     return -1 * logprobs
 
-def get_guesses(state, scores=False):
-    ''' Returns top-k guesses or guess indices of given vector '''
-    # state should be a vector scoring possible classes
-    guessvals, guessixes = torch.topk(state, args.guessn, 0)
-    # guessvals are the scores of each input cell
-    # guessixes are the indices of the max cells
-    if scores:
-        return guessvals
-    else:
-        return guessixes
-
-def get_guessscores(state):
-    ''' Wrapper that returns top-k guesses of given vector '''
-    return get_guesses(state, True)
-
 def get_complexity(state, obs, sentid):
     ''' Generates complexity output for given state, observation, and sentid '''
     Hs = torch.log2(torch.exp(torch.squeeze(apply(get_entropy, state))))
     surps = torch.log2(torch.exp(apply(get_surps, state)))
-
-    if args.guess:
-        guesses = apply(get_guesses, state)
-        guessscores = apply(get_guessscores, state)
 
     for corpuspos, targ in enumerate(obs):
         word = corpus.dictionary.idx2word[int(targ)]
@@ -340,21 +319,15 @@ def get_complexity(state, obs, sentid):
         surp = surps[corpuspos][int(targ)]
         if args.guess:
             outputguesses = []
+            guessscores, guesses = torch.topk(surps[corpuspos], args.guessn, dim= -1, largest=False)
             for guess_ix in range(args.guessn):
                 outputguesses.append(corpus.dictionary.idx2word[int(guesses[corpuspos][guess_ix])])
-                if args.guessscores:
-                    # output raw scores
-                    outputguesses.append("{:.3f}".format(float(guessscores[corpuspos][guess_ix])))
-                elif args.guessratios:
-                    # output scores (ratio of score(x)/score(best guess)
-                    outputguesses.append("{:.3f}".format(
-                        float(guessscores[corpuspos][guess_ix])/float(guessscores[corpuspos][0])))
+                if args.guesssurps:
+                    # output guess surps
+                    outputguesses.append("{:.3f}".format(float(guessscores[guess_ix])))
                 elif args.guessprobs:
                     # output probabilities
-                    # Currently normalizes probs over N-best list;
-                    # ideally it'd normalize to probs before getting the N-best
-                    outputguesses.append("{:.3f}".format(
-                        math.exp(float(nn.functional.log_softmax(guessscores[corpuspos], dim=0)[guess_ix]))))
+                    outputguesses.append("{:.3f}".format(2**(float(-1*guessscores[guess_ix]))))
             outputguesses = args.csep.join(outputguesses)
             print(args.csep.join([str(word), str(sentid), str(corpuspos), str(len(word)),
                                   str(float(surp)), str(float(Hs[corpuspos])),
@@ -430,12 +403,10 @@ def test_evaluate(test_sentences, data_source):
             if args.guess:
                 for i in range(args.guessn):
                     print('{0}guess'.format(args.csep)+str(i), end='')
-                    if args.guessscores:
-                        print('{0}gscore'.format(args.csep)+str(i), end='')
+                    if args.guesssurps:
+                        print('{0}gsurp'.format(args.csep)+str(i), end='')
                     elif args.guessprobs:
                         print('{0}gprob'.format(args.csep)+str(i), end='')
-                    elif args.guessratios:
-                        print('{0}gratio'.format(args.csep)+str(i), end='')
             sys.stdout.write('\n')
     if PROGRESS:
         bar = Bar('Processing', max=len(data_source))
