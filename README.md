@@ -95,8 +95,7 @@ These parameters specify runtime options for using the model
     
     --guess: If present, display model's best guess(es) at each time step (default: absent)
     --guessn [INT]: Number of guesses for model to make at each time step (default: 1)  
-    --guessscores: If present, output unnormalized guess scores along with each guess (default: absent)  
-    --guessratios: If present, output guess scores normalized by best guess (default: absent)  
+    --guesssurps: If present, output guess surps along with each guess (default: absent)  
     --guessprobs: If present, output guess probabilities along with each guess (default: absent)  
     --complexn [INT]: Compute complexity over best N guesses instead of over full vocab (default: 0 aka full vocab)  
 
